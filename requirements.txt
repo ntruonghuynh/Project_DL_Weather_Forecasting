@@ -1,0 +1,26 @@
+# core
+numpy
+
+# deep learning
+torch
+
+# data
+pandas
+
+# config
+PyYAML
+
+# evaluation
+scikit-learn
+matplotlib
+
+# API/demo
+fastapi
+uvicorn
+streamlit
+pydantic
+
+# development
+pytest
+ruff
+black

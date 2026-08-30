@@ -3,7 +3,6 @@
 from importlib import import_module
 from pathlib import Path
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 

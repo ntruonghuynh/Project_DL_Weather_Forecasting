@@ -1,0 +1,11 @@
+project: jena_weather_forecasting
+seed: 42
+data:
+  input_hours: 168
+  forecast_hours: 72
+  target_features: 1
+training:
+  teacher_forcing_ratio: 0.0
+run:
+  runs_dir: runs
+  parent_run_id: null

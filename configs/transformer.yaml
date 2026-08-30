@@ -1,0 +1,5 @@
+defaults: base.yaml
+model:
+  name: transformer
+  owner: TV5
+  implementation: pending

@@ -1,9 +1,18 @@
-"""Executable tests for Data Batch Contract v1."""
+"""Executable tests for Data Batch Contract v1 and the TV2 sliding-window dataset."""
 
+import numpy as np
+import pandas as pd
 import pytest
 import torch
 
-from src.data.dataset import WeatherBatch, WeatherDataset, WeatherSample, validate_weather_batch
+from src.data.dataloader import build_dataloaders
+from src.data.dataset import (
+    WeatherBatch,
+    WeatherDataset,
+    WeatherForecastDataset,
+    WeatherSample,
+    validate_weather_batch,
+)
 
 
 def make_batch(batch_size: int = 2) -> WeatherBatch:
@@ -114,3 +123,165 @@ def test_feature_and_target_devices_must_match() -> None:
 
     with pytest.raises(ValueError, match="must share a device"):
         validate_weather_batch(batch)
+
+
+# ---------------------------------------------------------------------------
+# WeatherForecastDataset - sliding-window implementation (TV2)
+# ---------------------------------------------------------------------------
+
+FEATURES = ["p", "T", "hour_sin"]
+TARGET = "T"
+WINDOW = 168
+HORIZON = 72
+SAMPLE_SPAN = WINDOW + HORIZON  # 240 hours needed for one sample
+
+
+def make_hourly_df(n_hours: int, start: str = "2020-01-01", nan_hours: set[int] | None = None) -> pd.DataFrame:
+    """Build a small synthetic processed-style hourly DataFrame for dataset tests."""
+    nan_hours = nan_hours or set()
+    timestamps = pd.date_range(start, periods=n_hours, freq="1h")
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame(
+        {
+            "Date Time": timestamps,
+            "p": rng.normal(size=n_hours).astype("float32"),
+            "T": rng.normal(size=n_hours).astype("float32"),
+            "hour_sin": np.sin(2 * np.pi * timestamps.hour / 24).astype("float32"),
+        }
+    )
+    for hour_index in nan_hours:
+        df.loc[hour_index, "T"] = np.nan
+    return df
+
+
+def test_dataset_is_created_with_expected_length() -> None:
+    """Dataset length equals the number of valid 240-hour windows."""
+    n_hours = SAMPLE_SPAN + 10
+    df = make_hourly_df(n_hours)
+    dataset = WeatherForecastDataset(df, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON)
+    assert len(dataset) == n_hours - SAMPLE_SPAN + 1
+
+
+def test_sample_shapes_and_dtypes() -> None:
+    """x, y, and both timestamp tensors match the WeatherSample contract."""
+    df = make_hourly_df(SAMPLE_SPAN + 5)
+    dataset = WeatherForecastDataset(df, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON)
+    sample = dataset[0]
+
+    assert sample["x"].shape == (WINDOW, len(FEATURES))
+    assert sample["y"].shape == (HORIZON, 1)
+    assert sample["input_timestamps"].shape == (WINDOW,)
+    assert sample["target_timestamps"].shape == (HORIZON,)
+    assert sample["x"].dtype == torch.float32
+    assert sample["y"].dtype == torch.float32
+    assert sample["input_timestamps"].dtype == torch.int64
+    assert sample["target_timestamps"].dtype == torch.int64
+
+
+def test_no_nan_or_inf_in_any_sample() -> None:
+    """Every emitted sample is finite, even when the source data has gaps."""
+    df = make_hourly_df(SAMPLE_SPAN * 3, nan_hours={5, 300})
+    df.loc[100, "p"] = np.inf
+    dataset = WeatherForecastDataset(df, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON)
+
+    assert len(dataset) > 0
+    for index in range(len(dataset)):
+        sample = dataset[index]
+        assert torch.isfinite(sample["x"]).all()
+        assert torch.isfinite(sample["y"]).all()
+
+
+def test_windows_touching_a_gap_are_dropped() -> None:
+    """A single missing hour removes exactly the windows whose span covers it."""
+    n_hours = 600
+    gap_hour = 300
+    clean_dataset = WeatherForecastDataset(
+        make_hourly_df(n_hours), FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON
+    )
+    gapped_dataset = WeatherForecastDataset(
+        make_hourly_df(n_hours, nan_hours={gap_hour}), FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON
+    )
+
+    total_windows = n_hours - SAMPLE_SPAN + 1
+    expected_dropped = min(SAMPLE_SPAN, total_windows)
+    assert len(clean_dataset) == total_windows
+    assert len(gapped_dataset) == total_windows - expected_dropped
+
+    for index in range(len(gapped_dataset)):
+        assert torch.isfinite(gapped_dataset[index]["x"]).all()
+        assert torch.isfinite(gapped_dataset[index]["y"]).all()
+
+
+def test_timestamps_are_hourly_and_forecast_follows_input() -> None:
+    """Timestamps step by exactly one hour, and forecast starts right after input ends."""
+    df = make_hourly_df(SAMPLE_SPAN + 5)
+    dataset = WeatherForecastDataset(df, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON)
+    sample = dataset[0]
+
+    input_ts = sample["input_timestamps"].numpy()
+    target_ts = sample["target_timestamps"].numpy()
+    assert np.all(np.diff(input_ts) == 3600)
+    assert np.all(np.diff(target_ts) == 3600)
+    assert target_ts[0] == input_ts[-1] + 3600
+
+
+def test_split_boundary_never_crossed() -> None:
+    """A dataset built from one split's rows can never emit a timestamp outside that split."""
+    full_df = make_hourly_df(SAMPLE_SPAN * 4)
+    split_point = len(full_df) // 2
+    train_df = full_df.iloc[:split_point].reset_index(drop=True)
+    val_df = full_df.iloc[split_point:].reset_index(drop=True)
+
+    train_dataset = WeatherForecastDataset(train_df, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON)
+    val_dataset = WeatherForecastDataset(val_df, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON)
+
+    train_end = int(train_df["Date Time"].iloc[-1].timestamp())
+    val_start = int(val_df["Date Time"].iloc[0].timestamp())
+
+    for index in range(len(train_dataset)):
+        assert train_dataset[index]["target_timestamps"][-1].item() <= train_end
+    for index in range(len(val_dataset)):
+        assert val_dataset[index]["input_timestamps"][0].item() >= val_start
+
+
+def test_unsorted_timestamps_are_rejected() -> None:
+    """Refuse to build windows over a DataFrame that is not time-sorted."""
+    df = make_hourly_df(SAMPLE_SPAN + 5)
+    shuffled = df.sample(frac=1.0, random_state=0).reset_index(drop=True)
+
+    with pytest.raises(ValueError, match="sorted"):
+        WeatherForecastDataset(shuffled, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON)
+
+
+def test_target_must_be_in_features() -> None:
+    """The target column must be one of the feature columns (its index is derived from it)."""
+    df = make_hourly_df(SAMPLE_SPAN + 5)
+
+    with pytest.raises(ValueError, match="features"):
+        WeatherForecastDataset(df, FEATURES, "not_a_feature", input_window=WINDOW, horizon=HORIZON)
+
+
+def test_dataloader_batches_have_expected_dimensions() -> None:
+    """build_dataloaders yields WeatherBatch-shaped, contract-valid batches."""
+    df = make_hourly_df(SAMPLE_SPAN * 3)
+    train_dataset = WeatherForecastDataset(df, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON)
+    val_dataset = WeatherForecastDataset(df, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON)
+    test_dataset = WeatherForecastDataset(df, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON)
+
+    loaders = build_dataloaders(train_dataset, val_dataset, test_dataset, batch_size=4)
+    batch = next(iter(loaders["train"]))
+
+    assert batch["x"].shape == (4, WINDOW, len(FEATURES))
+    assert batch["y"].shape == (4, HORIZON, 1)
+    assert batch["input_timestamps"].shape == (4, WINDOW)
+    assert batch["target_timestamps"].shape == (4, HORIZON)
+    validate_weather_batch(batch, n_features=len(FEATURES))
+
+
+def test_last_observed_target_matches_final_input_hour() -> None:
+    """last_observed_target reads the target value at the last input timestep, not beyond."""
+    df = make_hourly_df(SAMPLE_SPAN + 5)
+    dataset = WeatherForecastDataset(df, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON)
+
+    expected = float(df[TARGET].iloc[WINDOW - 1])
+    assert dataset.last_observed_target(0) == pytest.approx(expected)

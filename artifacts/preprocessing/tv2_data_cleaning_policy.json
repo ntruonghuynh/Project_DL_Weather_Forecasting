@@ -1,0 +1,68 @@
+{
+  "policy_version": "1.0",
+  "status": "APPROVED_FOR_IMPLEMENTATION",
+  "owner": "TV2",
+  "source_file": "data/raw/jena_climate_2009_2016.csv",
+  "raw_data_rule": "The raw CSV is immutable; all transformations use an intermediate copy.",
+  "timestamp": {
+    "column": "Date Time",
+    "format": "%d.%m.%Y %H:%M:%S",
+    "timezone": "unverified_source_local_time",
+    "expected_frequency_minutes": 10,
+    "sort_before_processing": true
+  },
+  "duplicate_policy": {
+    "detected_duplicate_rows_after_first": 327,
+    "resolution": "After parsing and sorting, keep the first row for each duplicate timestamp.",
+    "raw_file_modified": false,
+    "record_dropped_count": true
+  },
+  "resampling": {
+    "frequency": "1h",
+    "mean_features": [
+      "p (mbar)",
+      "T (degC)",
+      "Tpot (K)",
+      "Tdew (degC)",
+      "rh (%)",
+      "VPmax (mbar)",
+      "VPact (mbar)",
+      "VPdef (mbar)",
+      "sh (g/kg)",
+      "H2OC (mmol/mol)",
+      "rho (g/m**3)",
+      "wv (m/s)"
+    ],
+    "max_features": ["max. wv (m/s)"],
+    "circular_mean_features": ["wd (deg)"],
+    "time_features_created_after_resample": true
+  },
+  "gap_policy": {
+    "expected_raw_interval_minutes": 10,
+    "short_gaps": "Do not reconstruct missing raw 10-minute rows; aggregate available observations into hourly bins.",
+    "long_gaps": "Mark the gap and prevent sliding windows from crossing it.",
+    "gap_count_from_precheck": 5,
+    "input_imputation": {
+      "method": "causal_forward_fill_then_train_median",
+      "forward_fill_max_hours": 3,
+      "median_fit_scope": "train_only",
+      "missing_indicator": true,
+      "backward_fill": false
+    },
+    "target_imputation": false,
+    "drop_window_if_target_missing": true
+  },
+  "split_policy": {
+    "method": "chronological",
+    "train_fraction": 0.70,
+    "validation_fraction": 0.15,
+    "test_fraction": 0.15,
+    "fit_scaler_on": "train_only"
+  },
+  "window_policy": {
+    "input_len_hours": 168,
+    "horizon_hours": 72,
+    "same_split_only": true,
+    "do_not_cross_timestamp_gap": true
+  }
+}

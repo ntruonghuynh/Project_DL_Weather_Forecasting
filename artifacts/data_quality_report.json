@@ -1,0 +1,135 @@
+{
+  "report_type": "raw_data_quality_precheck",
+  "status": "REQUIRES_DUPLICATE_AND_GAP_POLICY",
+  "generated_at": "2026-08-31",
+  "source_file": "data/raw/jena_climate_2009_2016.csv",
+  "dataset_name": "Jena Climate Dataset",
+  "dataset_slug": "mnassrib/jena-climate",
+  "source_url": "https://www.kaggle.com/datasets/mnassrib/jena-climate",
+  "raw_file_immutable": true,
+  "row_count": 420551,
+  "column_count": 15,
+  "columns": [
+    "Date Time",
+    "p (mbar)",
+    "T (degC)",
+    "Tpot (K)",
+    "Tdew (degC)",
+    "rh (%)",
+    "VPmax (mbar)",
+    "VPact (mbar)",
+    "VPdef (mbar)",
+    "sh (g/kg)",
+    "H2OC (mmol/mol)",
+    "rho (g/m**3)",
+    "wv (m/s)",
+    "max. wv (m/s)",
+    "wd (deg)"
+  ],
+  "timestamp": {
+    "format": "%d.%m.%Y %H:%M:%S",
+    "parse_errors": 0,
+    "date_min": "2009-01-01T00:10:00",
+    "date_max": "2017-01-01T00:00:00",
+    "mode_interval_minutes": 10.0,
+    "monotonic_in_file": false,
+    "duplicate_timestamp_groups": 327,
+    "duplicate_rows_after_first": 327,
+    "duplicate_values_identical": true,
+    "duplicate_ranges": [
+      {
+        "start": "2010-07-01T00:10:00",
+        "end": "2010-07-02T00:00:00",
+        "timestamp_count": 144
+      },
+      {
+        "start": "2014-03-20T11:00:00",
+        "end": "2014-03-21T17:20:00",
+        "timestamp_count": 183
+      }
+    ],
+    "unique_timestamp_gaps": 5,
+    "gaps": [
+      {
+        "after": "2009-10-08T09:40:00",
+        "before": "2009-10-08T10:10:00",
+        "interval_minutes": 30
+      },
+      {
+        "after": "2013-05-16T08:50:00",
+        "before": "2013-05-16T09:10:00",
+        "interval_minutes": 20
+      },
+      {
+        "after": "2014-07-30T08:00:00",
+        "before": "2014-07-30T08:20:00",
+        "interval_minutes": 20
+      },
+      {
+        "after": "2014-09-24T17:00:00",
+        "before": "2014-09-25T09:00:00",
+        "interval_minutes": 960
+      },
+      {
+        "after": "2016-10-25T10:30:00",
+        "before": "2016-10-28T12:50:00",
+        "interval_minutes": 4460
+      }
+    ]
+  },
+  "missing_by_column": {
+    "Date Time": 0,
+    "p (mbar)": 0,
+    "T (degC)": 0,
+    "Tpot (K)": 0,
+    "Tdew (degC)": 0,
+    "rh (%)": 0,
+    "VPmax (mbar)": 0,
+    "VPact (mbar)": 0,
+    "VPdef (mbar)": 0,
+    "sh (g/kg)": 0,
+    "H2OC (mmol/mol)": 0,
+    "rho (g/m**3)": 0,
+    "wv (m/s)": 0,
+    "max. wv (m/s)": 0,
+    "wd (deg)": 0
+  },
+  "non_numeric_values_by_numeric_column": {
+    "p (mbar)": 0,
+    "T (degC)": 0,
+    "Tpot (K)": 0,
+    "Tdew (degC)": 0,
+    "rh (%)": 0,
+    "VPmax (mbar)": 0,
+    "VPact (mbar)": 0,
+    "VPdef (mbar)": 0,
+    "sh (g/kg)": 0,
+    "H2OC (mmol/mol)": 0,
+    "rho (g/m**3)": 0,
+    "wv (m/s)": 0,
+    "max. wv (m/s)": 0,
+    "wd (deg)": 0
+  },
+  "infinite_values_by_numeric_column": {
+    "p (mbar)": 0,
+    "T (degC)": 0,
+    "Tpot (K)": 0,
+    "Tdew (degC)": 0,
+    "rh (%)": 0,
+    "VPmax (mbar)": 0,
+    "VPact (mbar)": 0,
+    "VPdef (mbar)": 0,
+    "sh (g/kg)": 0,
+    "H2OC (mmol/mol)": 0,
+    "rho (g/m**3)": 0,
+    "wv (m/s)": 0,
+    "max. wv (m/s)": 0,
+    "wd (deg)": 0
+  },
+  "constant_columns": [],
+  "required_follow_up": [
+    "Define and record duplicate resolution before resampling; raw CSV must remain unchanged.",
+    "Define and record gap handling before creating hourly data and windows.",
+    "Generate the final validator-backed report and locked feature schema after policy approval."
+  ]
+}

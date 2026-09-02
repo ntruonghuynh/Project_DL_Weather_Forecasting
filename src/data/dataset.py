@@ -198,7 +198,9 @@ class WeatherForecastDataset(Dataset):
         df = df.reset_index(drop=True)
         timestamps = pd.to_datetime(df[TIMESTAMP_COLUMN])
         if not timestamps.is_monotonic_increasing:
-            raise ValueError("df must be sorted by timestamp ascending (no leakage guarantee otherwise)")
+            raise ValueError(
+                "df must be sorted by timestamp ascending (no leakage guarantee otherwise)"
+            )
 
         self.features = list(features)
         self.target = target

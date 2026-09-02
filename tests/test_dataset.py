@@ -136,7 +136,9 @@ HORIZON = 72
 SAMPLE_SPAN = WINDOW + HORIZON  # 240 hours needed for one sample
 
 
-def make_hourly_df(n_hours: int, start: str = "2020-01-01", nan_hours: set[int] | None = None) -> pd.DataFrame:
+def make_hourly_df(
+    n_hours: int, start: str = "2020-01-01", nan_hours: set[int] | None = None
+) -> pd.DataFrame:
     """Build a small synthetic processed-style hourly DataFrame for dataset tests."""
     nan_hours = nan_hours or set()
     timestamps = pd.date_range(start, periods=n_hours, freq="1h")
@@ -199,7 +201,11 @@ def test_windows_touching_a_gap_are_dropped() -> None:
         make_hourly_df(n_hours), FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON
     )
     gapped_dataset = WeatherForecastDataset(
-        make_hourly_df(n_hours, nan_hours={gap_hour}), FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON
+        make_hourly_df(n_hours, nan_hours={gap_hour}),
+        FEATURES,
+        TARGET,
+        input_window=WINDOW,
+        horizon=HORIZON,
     )
 
     total_windows = n_hours - SAMPLE_SPAN + 1
@@ -232,8 +238,12 @@ def test_split_boundary_never_crossed() -> None:
     train_df = full_df.iloc[:split_point].reset_index(drop=True)
     val_df = full_df.iloc[split_point:].reset_index(drop=True)
 
-    train_dataset = WeatherForecastDataset(train_df, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON)
-    val_dataset = WeatherForecastDataset(val_df, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON)
+    train_dataset = WeatherForecastDataset(
+        train_df, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON
+    )
+    val_dataset = WeatherForecastDataset(
+        val_df, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON
+    )
 
     train_end = int(train_df["Date Time"].iloc[-1].timestamp())
     val_start = int(val_df["Date Time"].iloc[0].timestamp())
@@ -264,9 +274,15 @@ def test_target_must_be_in_features() -> None:
 def test_dataloader_batches_have_expected_dimensions() -> None:
     """build_dataloaders yields WeatherBatch-shaped, contract-valid batches."""
     df = make_hourly_df(SAMPLE_SPAN * 3)
-    train_dataset = WeatherForecastDataset(df, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON)
-    val_dataset = WeatherForecastDataset(df, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON)
-    test_dataset = WeatherForecastDataset(df, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON)
+    train_dataset = WeatherForecastDataset(
+        df, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON
+    )
+    val_dataset = WeatherForecastDataset(
+        df, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON
+    )
+    test_dataset = WeatherForecastDataset(
+        df, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON
+    )
 
     loaders = build_dataloaders(train_dataset, val_dataset, test_dataset, batch_size=4)
     batch = next(iter(loaders["train"]))

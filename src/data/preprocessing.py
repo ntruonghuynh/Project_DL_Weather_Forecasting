@@ -171,12 +171,15 @@ def clean_timestamps(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any]]:
         "exact_duplicate_rows_dropped": int(n_exact_duplicates_dropped),
         "conflicting_duplicate_timestamp_groups": n_conflicting_groups,
         "conflicting_resolution": (
-            "column_wise_mean" if n_conflicting_groups else "not_needed_all_duplicates_were_identical"
+            "column_wise_mean"
+            if n_conflicting_groups
+            else "not_needed_all_duplicates_were_identical"
         ),
         "monotonic_after_sort": bool(df[TIMESTAMP_COLUMN].is_monotonic_increasing),
     }
     logger.info(
-        "Timestamp cleaning: %d -> %d rows (dropped %d exact duplicates, aggregated %d conflicting groups)",
+        "Timestamp cleaning: %d -> %d rows "
+        "(dropped %d exact duplicates, aggregated %d conflicting groups)",
         input_rows,
         len(df),
         n_exact_duplicates_dropped,
@@ -427,7 +430,9 @@ def scale_features(
         out[feature_columns] = scaler.transform(out[feature_columns]).astype("float32")
         return out
 
-    logger.info("Fitted StandardScaler on %d train rows, %d features", len(train_df), len(feature_columns))
+    logger.info(
+        "Fitted StandardScaler on %d train rows, %d features", len(train_df), len(feature_columns)
+    )
     return _transform(train_df), _transform(val_df), _transform(test_df), scaler
 
 
@@ -524,9 +529,17 @@ def preprocess(raw_path: Path, output_dir: Path, config: dict[str, Any] | None =
 
     joblib.dump(scaler, artifacts_dir / "scaler.joblib")
     joblib.dump(scaler, output_dir / "scaler.joblib")
-    logger.info("Wrote scaler to %s and %s", artifacts_dir / "scaler.joblib", output_dir / "scaler.joblib")
+    logger.info(
+        "Wrote scaler to %s and %s",
+        artifacts_dir / "scaler.joblib",
+        output_dir / "scaler.joblib",
+    )
 
-    split_metadata = {**split_metadata, "cleaning": cleaning_report, "missing_handling": impute_report}
+    split_metadata = {
+        **split_metadata,
+        "cleaning": cleaning_report,
+        "missing_handling": impute_report,
+    }
     _write_json(artifacts_dir / "split_metadata.json", split_metadata)
     _write_json(output_dir / "split_metadata.json", split_metadata)
 

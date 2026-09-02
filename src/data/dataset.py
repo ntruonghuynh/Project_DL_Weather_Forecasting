@@ -1,9 +1,14 @@
-"""Data Batch Contract v1; dataset implementation belongs to TV2."""
+"""Data Batch Contract v1, plus the TV2 sliding-window dataset implementation."""
 
 from collections.abc import Mapping
 from typing import Protocol, TypedDict
 
+import numpy as np
+import pandas as pd
 import torch
+from torch.utils.data import Dataset
+
+from .validator import TIMESTAMP_COLUMN
 
 
 class WeatherSample(TypedDict):
@@ -147,3 +152,148 @@ class WeatherDataset(Protocol):
     def __len__(self) -> int: ...
 
     def __getitem__(self, index: int) -> WeatherSample: ...
+
+
+# ---------------------------------------------------------------------------
+# Sliding-window implementation (TV2)
+# ---------------------------------------------------------------------------
+#
+# Preprocessing (src/data/preprocessing.py) only produces clean, split,
+# imputed, scaled hourly rows - one row per hour, no sequences. This section
+# turns those rows into the (168h history -> 72h forecast) samples a
+# seq2seq model actually trains on: it slides a window one hour at a time
+# over a single split's DataFrame, keeps only windows with no NaN/Inf
+# anywhere in x or y, and returns each one as a WeatherSample.
+
+
+class WeatherForecastDataset(Dataset):
+    """Sliding-window PyTorch Dataset over one leakage-safe processed split.
+
+    Construct one instance per split (train/val/test): windows are built
+    only from the rows of the DataFrame passed in, so a window can never
+    span two splits - pass `train_df`/`val_df`/`test_df` separately, never a
+    concatenation of them.
+
+    `T (degC)` is intentionally left unimputed by preprocessing, so a gap in
+    the raw data can still leave NaN in the feature matrix (input side) or
+    the target column (forecast side). Any window touching such a gap -
+    anywhere in its 168 input hours or 72 forecast hours - is dropped at
+    construction time rather than being fed to the model, so every returned
+    sample is guaranteed NaN/Inf-free (see `_find_valid_starts`).
+    """
+
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        features: list[str],
+        target: str,
+        input_window: int = 168,
+        horizon: int = 72,
+    ) -> None:
+        if target not in features:
+            raise ValueError(f"target={target!r} must be included in features")
+        if input_window <= 0 or horizon <= 0:
+            raise ValueError("input_window and horizon must be positive")
+
+        df = df.reset_index(drop=True)
+        timestamps = pd.to_datetime(df[TIMESTAMP_COLUMN])
+        if not timestamps.is_monotonic_increasing:
+            raise ValueError(
+                "df must be sorted by timestamp ascending (no leakage guarantee otherwise)"
+            )
+
+        self.features = list(features)
+        self.target = target
+        self.input_window = input_window
+        self.horizon = horizon
+        # Read from the caller-supplied feature list, never hardcoded, per
+        # docs/WORKFLOW.md: "target_feature_index phải lấy từ schema hoặc cấu hình".
+        self.target_index = self.features.index(target)
+
+        self._feature_arr = df[self.features].to_numpy(dtype=np.float32)
+        self._target_arr = df[self.target].to_numpy(dtype=np.float32)
+        # Timestamps as int64 Unix epoch seconds (source clock is
+        # "unverified_source_local_time" per feature_schema.json - no
+        # timezone conversion is applied, only encoded as seconds-since-epoch
+        # for the tensor contract's int64 dtype).
+        #
+        # Cast the datetime64 array to datetime64[s] before viewing it as
+        # int64: pandas datetime64 columns are not guaranteed to be in "ns"
+        # resolution (pandas >=2.0 infers the resolution from the source
+        # data, e.g. "us"), so dividing a raw int64 view by a fixed 10**9
+        # silently corrupts the epoch value whenever the resolution isn't
+        # nanoseconds.
+        self._timestamps_s = timestamps.to_numpy().astype("datetime64[s]").astype(np.int64)
+
+        self._valid_starts = self._find_valid_starts()
+
+    def _find_valid_starts(self) -> np.ndarray:
+        """Vectorized scan for window start indices with no NaN/Inf in x or y.
+
+        For each candidate start `s`, x covers rows [s, s+input_window) and y
+        covers rows [s+input_window, s+input_window+horizon). Prefix sums of
+        a per-row "is bad" flag let every window's bad-row count be read off
+        in O(1), so the full scan is O(n) instead of O(n * window_len).
+        """
+        n = len(self._feature_arr)
+        window_len = self.input_window + self.horizon
+        if n < window_len:
+            return np.array([], dtype=np.int64)
+
+        row_x_bad = ~np.isfinite(self._feature_arr).all(axis=1)
+        row_y_bad = ~np.isfinite(self._target_arr)
+        prefix_x = np.concatenate([[0], np.cumsum(row_x_bad.astype(np.int64))])
+        prefix_y = np.concatenate([[0], np.cumsum(row_y_bad.astype(np.int64))])
+
+        max_start = n - window_len
+        starts = np.arange(0, max_start + 1)
+        x_bad_counts = prefix_x[starts + self.input_window] - prefix_x[starts]
+        y_bad_counts = prefix_y[starts + window_len] - prefix_y[starts + self.input_window]
+        valid_mask = (x_bad_counts == 0) & (y_bad_counts == 0)
+        return starts[valid_mask]
+
+    def __len__(self) -> int:
+        return len(self._valid_starts)
+
+    def __getitem__(self, index: int) -> WeatherSample:
+        start = int(self._valid_starts[index])
+        input_end = start + self.input_window
+        target_end = input_end + self.horizon
+
+        return {
+            "x": torch.from_numpy(self._feature_arr[start:input_end].copy()),
+            "y": torch.from_numpy(self._target_arr[input_end:target_end].copy()).unsqueeze(-1),
+            "input_timestamps": torch.from_numpy(self._timestamps_s[start:input_end].copy()),
+            "target_timestamps": torch.from_numpy(self._timestamps_s[input_end:target_end].copy()),
+        }
+
+    def last_observed_target(self, index: int) -> float:
+        """Scaled T(degC) at the final input hour - a persistence-baseline anchor.
+
+        Kept off the WeatherSample/WeatherBatch contract on purpose: every
+        model-facing batch must carry exactly the four contract keys (see
+        validate_weather_batch), so this convenience value lives on the
+        dataset instead, for evaluation/visualization/persistence-baseline
+        code that reads it explicitly. It is in the same standardized units
+        as `x`/`y` - inverse-transform with the fitted
+        artifacts/preprocessing/scaler.joblib to recover degrees Celsius.
+        """
+        start = int(self._valid_starts[index])
+        input_end = start + self.input_window
+        return float(self._feature_arr[input_end - 1, self.target_index])
+
+    def window_bounds(self, index: int) -> dict[str, pd.Timestamp]:
+        """Human-readable input/forecast period boundaries for one sample."""
+        start = int(self._valid_starts[index])
+        input_end = start + self.input_window
+        target_end = input_end + self.horizon
+
+        def _to_timestamp(epoch_seconds: int) -> pd.Timestamp:
+            return pd.Timestamp(int(epoch_seconds), unit="s")
+
+        return {
+            "input_start": _to_timestamp(self._timestamps_s[start]),
+            "input_end": _to_timestamp(self._timestamps_s[input_end - 1]),
+            "forecast_start": _to_timestamp(self._timestamps_s[input_end]),
+            "forecast_end": _to_timestamp(self._timestamps_s[target_end - 1]),
+        }

@@ -216,7 +216,14 @@ class WeatherForecastDataset(Dataset):
         # "unverified_source_local_time" per feature_schema.json - no
         # timezone conversion is applied, only encoded as seconds-since-epoch
         # for the tensor contract's int64 dtype).
-        self._timestamps_s = (timestamps.astype("int64").to_numpy() // 10**9).astype(np.int64)
+        #
+        # Cast the datetime64 array to datetime64[s] before viewing it as
+        # int64: pandas datetime64 columns are not guaranteed to be in "ns"
+        # resolution (pandas >=2.0 infers the resolution from the source
+        # data, e.g. "us"), so dividing a raw int64 view by a fixed 10**9
+        # silently corrupts the epoch value whenever the resolution isn't
+        # nanoseconds.
+        self._timestamps_s = timestamps.to_numpy().astype("datetime64[s]").astype(np.int64)
 
         self._valid_starts = self._find_valid_starts()
 

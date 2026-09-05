@@ -1,9 +1,10 @@
 {
-  "policy_version": "1.0",
+  "policy_version": "1.1",
   "status": "APPROVED_FOR_IMPLEMENTATION",
   "owner": "TV2",
   "source_file": "data/raw/jena_climate_2009_2016.csv",
   "raw_data_rule": "The raw CSV is immutable; all transformations use an intermediate copy.",
+  "amendment_2026_09_04": "Added sentinel_policy below (the -9999 wind-sensor sentinel found in artifacts/data_quality_report.json is now mapped to NaN before hourly resampling, so it cannot corrupt a mean/max aggregate). Also corrected gap_policy.input_imputation: it previously fell back to a train-median fill for any gap longer than forward_fill_max_hours, which contradicted this file's own gap_policy.long_gaps rule below (\"mark the gap and prevent sliding windows from crossing it\"). A gap beyond forward_fill_max_hours is now left as NaN, which is what actually makes WeatherForecastDataset drop a window that touches it - see src/data/preprocessing.py and configs/data.yaml (the editable source of truth these values are kept in sync with).",
   "timestamp": {
     "column": "Date Time",
     "format": "%d.%m.%Y %H:%M:%S",
@@ -37,17 +38,26 @@
     "circular_mean_features": ["wd (deg)"],
     "time_features_created_after_resample": true
   },
+  "sentinel_policy": {
+    "sentinel_values": [-9999, -9999.0],
+    "sentinel_columns": ["wv (m/s)", "max. wv (m/s)"],
+    "replacement": "NaN",
+    "applied_before": "resample_hourly",
+    "backward_fill": false,
+    "interpolate": false
+  },
   "gap_policy": {
     "expected_raw_interval_minutes": 10,
     "short_gaps": "Do not reconstruct missing raw 10-minute rows; aggregate available observations into hourly bins.",
     "long_gaps": "Mark the gap and prevent sliding windows from crossing it.",
     "gap_count_from_precheck": 5,
     "input_imputation": {
-      "method": "causal_forward_fill_then_train_median",
+      "method": "causal_forward_fill_only",
       "forward_fill_max_hours": 3,
-      "median_fit_scope": "train_only",
       "missing_indicator": true,
-      "backward_fill": false
+      "backward_fill": false,
+      "interpolate": false,
+      "residual_missing_policy": "left_as_nan_marks_window_invalid"
     },
     "target_imputation": false,
     "drop_window_if_target_missing": true

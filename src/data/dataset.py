@@ -8,7 +8,23 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 
+from ..config import load_data_config
 from .validator import TIMESTAMP_COLUMN
+
+# Single Source of Truth: configs/data.yaml (see src/config.py). Do not
+# hard-code the window sizes elsewhere - import DEFAULT_INPUT_LENGTH /
+# DEFAULT_HORIZON from this module instead.
+_CONFIG = load_data_config()
+_WINDOW_CFG = _CONFIG["window"]
+_MISSING_CFG = _CONFIG["missing"]
+_TIMESTAMP_CFG = _CONFIG["timestamp"]
+DEFAULT_INPUT_LENGTH: int = _WINDOW_CFG["input_length_hours"]
+DEFAULT_HORIZON: int = _WINDOW_CFG["horizon_hours"]
+# Expected spacing between consecutive rows, in seconds (3600 for the "1h"
+# resample_frequency this pipeline currently uses) - derived from config
+# rather than hardcoded so a future change to the resample cadence does not
+# silently desync this invariant check from the actual data.
+EXPECTED_STEP_SECONDS: int = int(pd.Timedelta(_TIMESTAMP_CFG["resample_frequency"]).total_seconds())
 
 
 class WeatherSample(TypedDict):
@@ -48,8 +64,8 @@ def _require_tensor(batch: Mapping[str, object], key: str) -> torch.Tensor:
 
 def validate_weather_batch(
     batch: Mapping[str, object],
-    input_length: int = 168,
-    horizon: int = 72,
+    input_length: int = DEFAULT_INPUT_LENGTH,
+    horizon: int = DEFAULT_HORIZON,
     target_dim: int = 1,
     n_features: int | None = None,
 ) -> None:
@@ -187,13 +203,20 @@ class WeatherForecastDataset(Dataset):
         df: pd.DataFrame,
         features: list[str],
         target: str,
-        input_window: int = 168,
-        horizon: int = 72,
+        input_window: int = DEFAULT_INPUT_LENGTH,
+        horizon: int = DEFAULT_HORIZON,
     ) -> None:
         if target not in features:
             raise ValueError(f"target={target!r} must be included in features")
         if input_window <= 0 or horizon <= 0:
             raise ValueError("input_window and horizon must be positive")
+        expected_rule = "drop_window_if_any_nan_or_inf_in_input_or_target"
+        if _MISSING_CFG["window_rejection_rule"] != expected_rule:
+            raise NotImplementedError(
+                "configs/data.yaml missing.window_rejection_rule="
+                f"{_MISSING_CFG['window_rejection_rule']!r} is not implemented; "
+                "_find_valid_starts always drops a window on any NaN/Inf in x or y."
+            )
 
         df = df.reset_index(drop=True)
         timestamps = pd.to_datetime(df[TIMESTAMP_COLUMN])
@@ -201,6 +224,17 @@ class WeatherForecastDataset(Dataset):
             raise ValueError(
                 "df must be sorted by timestamp ascending (no leakage guarantee otherwise)"
             )
+        if len(timestamps) > 1:
+            step_seconds = timestamps.diff().dropna().dt.total_seconds().to_numpy()
+            irregular = step_seconds != EXPECTED_STEP_SECONDS
+            if irregular.any():
+                raise ValueError(
+                    f"df must be on a strictly {EXPECTED_STEP_SECONDS}s-spaced grid "
+                    "(configs/data.yaml timestamp.resample_frequency): found "
+                    f"{int(irregular.sum())} irregular step(s). WeatherForecastDataset assumes "
+                    "preprocessing already resampled to a regular grid (resample_hourly fills "
+                    "every hour bin, so a real gap is a NaN row, never a missing timestamp)."
+                )
 
         self.features = list(features)
         self.target = target

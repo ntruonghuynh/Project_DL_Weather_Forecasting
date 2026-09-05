@@ -13,6 +13,7 @@ PyYAML
 # evaluation
 scikit-learn
 matplotlib
+statsmodels
 
 # API/demo
 fastapi
@@ -24,3 +25,7 @@ pydantic
 pytest
 ruff
 black
+
+# notebook execution (CI + local verification of notebooks/*.ipynb)
+nbconvert
+ipykernel

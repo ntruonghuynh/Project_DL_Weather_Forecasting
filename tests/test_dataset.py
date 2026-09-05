@@ -263,6 +263,20 @@ def test_unsorted_timestamps_are_rejected() -> None:
         WeatherForecastDataset(shuffled, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON)
 
 
+def test_irregular_timestamp_spacing_is_rejected() -> None:
+    """Refuse to build windows when a row is missing from the hourly grid itself.
+
+    resample_hourly always fills every hour bin (a real gap becomes a NaN row,
+    not a missing timestamp), so a jump other than exactly 3600s means the
+    caller passed data that never went through preprocessing correctly.
+    """
+    df = make_hourly_df(SAMPLE_SPAN + 5)
+    df = df.drop(index=50).reset_index(drop=True)
+
+    with pytest.raises(ValueError, match="3600"):
+        WeatherForecastDataset(df, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON)
+
+
 def test_target_must_be_in_features() -> None:
     """The target column must be one of the feature columns (its index is derived from it)."""
     df = make_hourly_df(SAMPLE_SPAN + 5)

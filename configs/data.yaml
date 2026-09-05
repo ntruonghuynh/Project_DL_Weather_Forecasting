@@ -1,0 +1,67 @@
+# Single Source of Truth for the TV2 data pipeline (Jena Climate weather
+# forecasting). validator.py, preprocessing.py, dataset.py, and the
+# notebooks in notebooks/ all read this file through src/config.py instead
+# of each hard-coding their own copy of these numbers. Changing a policy
+# value here changes it everywhere at once.
+#
+# This mirrors and supersedes the values previously duplicated across
+# artifacts/preprocessing/tv2_data_cleaning_policy.json and
+# artifacts/preprocessing/feature_schema.json; those files remain as
+# generated run artifacts, this file is the editable policy input.
+
+policy_version: "1.1"
+owner: "TV2"
+source_file: "data/raw/jena_climate_2009_2016.csv"
+
+# 1. Timestamp
+timestamp:
+  column: "Date Time"
+  format: "%d.%m.%Y %H:%M:%S"
+  timezone: "unverified_source_local_time"
+  raw_frequency_minutes: 10      # native sampling interval of the raw CSV
+  resample_frequency: "1h"       # modeling resolution after hourly resampling
+
+# 2. Target
+target:
+  column: "T (degC)"
+
+# 3. Sliding window
+window:
+  input_length_hours: 168        # 7 days of history fed to the encoder
+  horizon_hours: 72               # 3 days forecast produced by the decoder
+
+# 4. Missing-data policy
+missing:
+  # Known invalid-reading sentinel codes used by the original station
+  # logger (e.g. wind sensors emit -9999 instead of a real NaN).
+  sentinel_values: [-9999, -9999.0]
+  sentinel_columns:
+    - "wv (m/s)"
+    - "max. wv (m/s)"
+  # Gap severity thresholds, in hours, over the hourly-resampled grid.
+  short_gap_threshold_hours: 3    # <= this: safe to causal forward-fill
+  long_gap_threshold_hours: 24    # >= this: critical, must never be crossed by one window
+  # Short gaps (<= short_gap_threshold_hours) are causal forward-filled.
+  # Anything left over (a long or critical gap) is NOT median-filled or
+  # otherwise fabricated - it is left as NaN, which is exactly what makes
+  # window_rejection_rule below drop any sliding window that touches it.
+  input_missing_method: "causal_forward_fill_only"
+  forward_fill_max_hours: 3       # causal forward-fill limit (== short_gap_threshold_hours)
+  backward_fill: false            # never fill from the future
+  interpolate: false              # never fabricate a smooth trend through unobserved hours
+  missing_indicator: true         # emit one missing_<feature> flag per raw feature
+  target_missing_rule: "never_imputed"
+  window_rejection_rule: "drop_window_if_any_nan_or_inf_in_input_or_target"
+
+# 5. Data split
+split:
+  method: "chronological"
+  train_fraction: 0.70
+  validation_fraction: 0.15
+  test_fraction: 0.15
+
+# 6. Scaling
+scaling:
+  method: "standard_scaler"
+  fit_scope: "train_only"         # scaler is fit on train rows only, never val/test
+  binary_feature_scaling_rule: "include_in_standard_scaler"  # missing_* flags are scaled like any other feature, not excluded

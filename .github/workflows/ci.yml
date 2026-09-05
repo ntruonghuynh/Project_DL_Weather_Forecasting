@@ -17,3 +17,54 @@ jobs:
       - run: python -m compileall src api app scripts
       - run: python -m ruff check src api app scripts tests
       - run: python -m pytest
+
+  notebooks:
+    runs-on: ubuntu-latest
+    needs: checks
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements.txt kaggle
+
+      # data/raw/*.csv is gitignored (see .gitignore, data/raw/manifest.json
+      # records provenance + a sha256 for the exact file this pipeline was
+      # built against). A fresh checkout has no raw data, so it must be
+      # fetched here from the same source manifest.json declares - never a
+      # different/guessed mirror - and its checksum verified before any
+      # notebook reads it. scripts/prepare_data.py owns that logic.
+      - name: Prepare raw dataset (see data/raw/manifest.json)
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          if [ -z "$KAGGLE_USERNAME" ] || [ -z "$KAGGLE_KEY" ]; then
+            echo "::error::KAGGLE_USERNAME/KAGGLE_KEY repo secrets are not set. Notebook" \
+                 "execution needs them to fetch data/raw/jena_climate_2009_2016.csv from the" \
+                 "Kaggle dataset declared in data/raw/manifest.json (mnassrib/jena-climate)." \
+                 "Add both secrets under Settings > Secrets and variables > Actions, then re-run."
+            exit 1
+          fi
+          python scripts/prepare_data.py
+
+      - run: python -m ipykernel install --user --name python3 --display-name "Python 3"
+
+      # Sequential: 02 reads data/raw and writes data/processed + artifacts/preprocessing
+      # that 03 then reads - order matters, so each step waits on the previous one.
+      - name: Execute 01_data_check.ipynb
+        run: >
+          python -m nbconvert --to notebook --execute
+          --output-dir /tmp/executed_notebooks --ExecutePreprocessor.timeout=900
+          notebooks/01_data_check.ipynb
+      - name: Execute 02_preprocessing_check.ipynb
+        run: >
+          python -m nbconvert --to notebook --execute
+          --output-dir /tmp/executed_notebooks --ExecutePreprocessor.timeout=900
+          notebooks/02_preprocessing_check.ipynb
+      - name: Execute 03_dataset_check.ipynb
+        run: >
+          python -m nbconvert --to notebook --execute
+          --output-dir /tmp/executed_notebooks --ExecutePreprocessor.timeout=900
+          notebooks/03_dataset_check.ipynb

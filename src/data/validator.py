@@ -297,6 +297,7 @@ def _detect_sentinels(
     by_column = []
     total_count = 0
     row_count = len(df)
+    checked_columns = [c for c in sentinel_columns if c in df.columns]
 
     for column in sentinel_columns:
         if column not in df.columns:
@@ -325,10 +326,15 @@ def _detect_sentinels(
             }
         )
 
+    total_checked_cells = row_count * len(checked_columns)
     return {
         "sentinel_values": sentinel_values,
         "sentinel_columns": sentinel_columns,
         "total_sentinel_count": total_count,
+        "total_checked_cells": total_checked_cells,
+        "sentinel_rate_overall": (
+            round(total_count / total_checked_cells, 6) if total_checked_cells else 0.0
+        ),
         "by_column": by_column,
     }
 
@@ -505,6 +511,11 @@ def generate_data_quality_report(
         else "PASS"
     )
 
+    feature_count = (
+        report["column_count"] - 1
+        if TIMESTAMP_COLUMN in report["columns"]
+        else report["column_count"]
+    )
     full_report = {
         "report_type": "raw_data_quality_report",
         "generated_by": "src.data.validator.generate_data_quality_report",
@@ -513,6 +524,7 @@ def generate_data_quality_report(
         "config_source": "configs/data.yaml",
         "row_count": report["row_count"],
         "column_count": report["column_count"],
+        "feature_count": feature_count,
         "schema": schema_block,
         "timestamp": timestamp_block,
         "missing_summary": missing_block,

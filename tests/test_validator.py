@@ -181,6 +181,20 @@ def test_sentinel_values_are_counted_and_located(tmp_path: Path) -> None:
     assert report["sentinel_summary"]["total_sentinel_count"] == 2
 
 
+def test_sentinel_rate_overall_is_relative_to_checked_columns_only(tmp_path: Path) -> None:
+    """sentinel_rate_overall divides by rows * sentinel columns, not by every raw column."""
+    n_rows = 40
+    df = make_raw_df(n_rows)
+    df.loc[[0, 1], SENTINEL_COLUMN] = SENTINEL_VALUE
+    report = generate_data_quality_report(write_csv(tmp_path, df))
+
+    n_sentinel_columns = len(_CONFIG["missing"]["sentinel_columns"])
+    expected_rate = 2 / (n_rows * n_sentinel_columns)
+
+    assert report["sentinel_summary"]["total_checked_cells"] == n_rows * n_sentinel_columns
+    assert report["sentinel_summary"]["sentinel_rate_overall"] == pytest.approx(expected_rate)
+
+
 def test_sentinel_column_missing_from_dataframe_is_reported(tmp_path: Path) -> None:
     """A configured sentinel column absent from the CSV is flagged, not silently skipped."""
     custom_missing = {**_CONFIG["missing"], "sentinel_columns": ["not_a_real_column"]}
@@ -287,6 +301,15 @@ def test_report_has_all_required_sections(tmp_path: Path) -> None:
     for key in required_keys:
         assert key in report
     assert report["quality_status"]["overall_status"] == "PASS"
+
+
+def test_feature_count_excludes_the_timestamp_column(tmp_path: Path) -> None:
+    """feature_count is column_count minus the timestamp column, not the raw column total."""
+    df = make_raw_df(20)
+    report = generate_data_quality_report(write_csv(tmp_path, df))
+
+    assert report["feature_count"] == report["column_count"] - 1
+    assert report["feature_count"] == len(EXPECTED_COLUMNS) - 1
 
 
 def test_report_is_written_to_output_path(tmp_path: Path) -> None:

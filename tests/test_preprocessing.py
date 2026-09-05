@@ -11,11 +11,13 @@ import pytest
 from sklearn.preprocessing import StandardScaler
 
 from src.data.preprocessing import (
+    FEATURE_COLUMNS,
     RAW_NUMERIC_COLUMNS,
     TARGET_COLUMN,
     TARGET_INDEX,
     TIMESTAMP_COLUMN,
     _circular_mean_deg,
+    build_public_feature_schema,
     handle_sentinels,
     impute_missing,
     inverse_transform_target,
@@ -365,3 +367,45 @@ def test_inverse_transform_target_default_index_is_target_index() -> None:
     result = inverse_transform_target(np.array([1.0]), scaler)
 
     assert result == pytest.approx([7.0])
+
+
+# ---------------------------------------------------------------------------
+# 11. Public feature schema (artifacts/feature_schema.json)
+# ---------------------------------------------------------------------------
+
+
+def test_build_public_feature_schema_matches_pipeline_constants() -> None:
+    """The schema's feature list/target/shape always mirror the live pipeline constants."""
+    schema = build_public_feature_schema()
+
+    assert [f["name"] for f in schema["features"]] == FEATURE_COLUMNS
+    assert schema["n_input_features"] == len(FEATURE_COLUMNS)
+    assert schema["target_column"] == TARGET_COLUMN
+    assert schema["target_index"] == TARGET_INDEX
+    assert sum(f["is_target"] for f in schema["features"]) == 1
+    assert schema["features"][TARGET_INDEX]["is_target"] is True
+
+
+def test_build_public_feature_schema_infers_units_from_column_names() -> None:
+    """Raw physical-unit columns keep their unit; engineered/indicator columns are dimensionless."""
+    schema = build_public_feature_schema()
+    by_name = {f["name"]: f for f in schema["features"]}
+
+    assert by_name["p (mbar)"]["unit"] == "mbar"
+    assert by_name["T (degC)"]["unit"] == "degC"
+    assert by_name["rh (%)"]["unit"] == "%"
+    assert by_name["hour_sin"]["unit"] == "dimensionless"
+    assert by_name["missing_T_degC"]["unit"] == "dimensionless"
+
+
+def test_build_public_feature_schema_window_contract_matches_config() -> None:
+    """x_shape/y_shape strings are derived from configs/data.yaml, not literal numbers."""
+    from src.config import load_data_config
+
+    window_cfg = load_data_config()["window"]
+    schema = build_public_feature_schema()
+
+    assert schema["window_contract"]["input_length_hours"] == window_cfg["input_length_hours"]
+    assert schema["window_contract"]["horizon_hours"] == window_cfg["horizon_hours"]
+    assert schema["window_contract"]["x_shape"] == f"[{window_cfg['input_length_hours']}, 32]"
+    assert schema["window_contract"]["y_shape"] == f"[{window_cfg['horizon_hours']}, 1]"

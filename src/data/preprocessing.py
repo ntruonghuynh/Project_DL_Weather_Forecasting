@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -555,6 +556,72 @@ def _scaler_info(scaler: StandardScaler, feature_columns: list[str]) -> dict[str
     }
 
 
+def _infer_unit(column_name: str) -> str:
+    """Physical unit parsed from a raw column's own name, e.g. 'p (mbar)' -> 'mbar'.
+
+    Every raw Jena Climate column already encodes its unit in a trailing
+    '(...)' - reading it from the name itself (the single place it is
+    defined) avoids maintaining a second, driftable unit table by hand.
+    """
+    match = re.search(r"\(([^)]+)\)\s*$", column_name)
+    return match.group(1) if match else "dimensionless"
+
+
+def build_public_feature_schema(
+    feature_columns: list[str] = FEATURE_COLUMNS,
+    target_column: str = TARGET_COLUMN,
+    target_index: int = TARGET_INDEX,
+) -> dict[str, Any]:
+    """Fresh, pipeline-generated feature schema for downstream (Model Team) consumers.
+
+    Unlike LOCKED_SCHEMA_PATH (a hand-approved contract this pipeline
+    validates against - see `_assert_matches_locked_schema`), this is
+    rebuilt from the live FEATURE_COLUMNS/TARGET_* constants and
+    `configs/data.yaml` on every `preprocess()` run, so it can never silently
+    drift from what actually executed. Written to `artifacts/feature_schema.json`.
+    """
+    features = []
+    for column in feature_columns:
+        is_engineered = column in TIME_FEATURE_COLUMNS or column in INDICATOR_NAME_MAP.values()
+        features.append(
+            {
+                "name": column,
+                "dtype": "float32",
+                "unit": "dimensionless" if is_engineered else _infer_unit(column),
+                "is_target": column == target_column,
+            }
+        )
+
+    input_length_hours = _CONFIG["window"]["input_length_hours"]
+    horizon_hours = _CONFIG["window"]["horizon_hours"]
+    return {
+        "schema_type": "pipeline_feature_schema",
+        "generated_by": "src.data.preprocessing.build_public_feature_schema",
+        "config_source": "configs/data.yaml",
+        "n_input_features": len(feature_columns),
+        "target_column": target_column,
+        "target_index": target_index,
+        "features": features,
+        "window_contract": {
+            "input_length_hours": input_length_hours,
+            "horizon_hours": horizon_hours,
+            "x_shape": f"[{input_length_hours}, {len(feature_columns)}]",
+            "y_shape": f"[{horizon_hours}, 1]",
+        },
+        "missing_policy": {
+            "forward_fill_max_hours": _MISSING_CFG["forward_fill_max_hours"],
+            "backward_fill": _MISSING_CFG["backward_fill"],
+            "interpolate": _MISSING_CFG["interpolate"],
+            "target_missing_rule": _MISSING_CFG["target_missing_rule"],
+        },
+        "scaling": {
+            "method": _SCALING_CFG["method"],
+            "fit_scope": _SCALING_CFG["fit_scope"],
+            "artifact_path": "artifacts/preprocessing/scaler.joblib",
+        },
+    }
+
+
 # ---------------------------------------------------------------------------
 # Contract check + I/O helpers
 # ---------------------------------------------------------------------------
@@ -666,6 +733,11 @@ def preprocess(raw_path: Path, output_dir: Path, config: dict[str, Any] | None =
     _write_json(output_dir / "split_metadata.json", split_metadata)
 
     _write_json(output_dir / "feature_schema.json", schema)
+
+    # Fresh, always-in-sync feature schema for the Model Team - regenerated
+    # every run from live FEATURE_COLUMNS/config, distinct from the
+    # hand-approved LOCKED_SCHEMA_PATH this function validates against above.
+    _write_json(PROJECT_ROOT / "artifacts" / "feature_schema.json", build_public_feature_schema())
 
     logger.info(
         "Preprocessing complete: train=%d val=%d test=%d rows, %d features -> %s",

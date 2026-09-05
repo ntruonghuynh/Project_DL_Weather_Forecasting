@@ -1,11 +1,12 @@
 {
   "report_type": "raw_data_quality_report",
   "generated_by": "src.data.validator.generate_data_quality_report",
-  "generated_at": "2026-09-04T03:18:55.584216+00:00",
+  "generated_at": "2026-09-05T15:00:10.539268+00:00",
   "source_file": "E:\\Project_Deep\\Project_DL_Weather_Forecasting\\data\\raw\\jena_climate_2009_2016.csv",
   "config_source": "configs/data.yaml",
   "row_count": 420551,
   "column_count": 15,
+  "feature_count": 14,
   "schema": {
     "expected_columns": [
       "Date Time",
@@ -243,6 +244,8 @@
       "max. wv (m/s)"
     ],
     "total_sentinel_count": 38,
+    "total_checked_cells": 841102,
+    "sentinel_rate_overall": 4.5e-05,
     "by_column": [
       {
         "column": "wv (m/s)",

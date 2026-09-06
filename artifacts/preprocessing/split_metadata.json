@@ -28,35 +28,176 @@
     "conflicting_resolution": "not_needed_all_duplicates_were_identical",
     "monotonic_after_sort": true
   },
+  "sentinel_handling": {
+    "sentinel_values": [
+      -9999,
+      -9999.0
+    ],
+    "sentinel_columns": [
+      "wv (m/s)",
+      "max. wv (m/s)"
+    ],
+    "replaced_by_column": {
+      "wv (m/s)": 18,
+      "max. wv (m/s)": 20
+    },
+    "total_replaced": 38,
+    "applied_before": "resample_hourly",
+    "backward_fill": false,
+    "interpolate": false
+  },
   "missing_handling": {
     "forward_fill_limit_hours": 3,
-    "median_fit_scope": "train_only",
+    "residual_missing_policy": "left_as_nan_marks_window_invalid",
     "backward_fill": false,
+    "interpolate": false,
     "target_column_imputed": false,
-    "train_median": {
-      "p (mbar)": 989.1141666666666,
-      "Tpot (K)": 283.3233333333333,
-      "Tdew (degC)": 4.971666666666667,
-      "rh (%)": 79.16666666666667,
-      "VPmax (mbar)": 11.65,
-      "VPact (mbar)": 8.711666666666668,
-      "VPdef (mbar)": 2.1566666666666667,
-      "sh (g/kg)": 5.501666666666666,
-      "H2OC (mmol/mol)": 8.815833333333334,
-      "rho (g/m**3)": 1213.7150000000001,
-      "wv (m/s)": 1.8150000000000002,
-      "max. wv (m/s)": 3.88,
-      "wd (deg)": 196.20171680272682
-    },
     "remaining_missing_after_fill": {
       "train": 0,
-      "validation": 0,
-      "test": 0
+      "validation": 156,
+      "test": 910
     },
     "remaining_missing_target": {
       "train": 0,
       "validation": 15,
       "test": 73
+    }
+  },
+  "scaling": {
+    "method": "standard_scaler",
+    "fit_scope": "train_only",
+    "binary_feature_scaling_rule": "include_in_standard_scaler",
+    "n_features": 32,
+    "n_samples_seen": 49090,
+    "per_feature": {
+      "p (mbar)": {
+        "mean": 988.6604656005976,
+        "scale": 8.291157383881163
+      },
+      "T (degC)": {
+        "mean": 9.10956050112039,
+        "scale": 8.644982432863287
+      },
+      "Tpot (K)": {
+        "mean": 283.19595479052083,
+        "scale": 8.714511219778977
+      },
+      "Tdew (degC)": {
+        "mean": 4.609847443471176,
+        "scale": 6.974468993735919
+      },
+      "rh (%)": {
+        "mean": 75.94247346370612,
+        "scale": 16.460460291600764
+      },
+      "VPmax (mbar)": {
+        "mean": 13.354347932369118,
+        "scale": 7.677837107031985
+      },
+      "VPact (mbar)": {
+        "mean": 9.364891525768996,
+        "scale": 4.210399243868863
+      },
+      "VPdef (mbar)": {
+        "mean": 3.989372968017926,
+        "scale": 4.790158426583957
+      },
+      "sh (g/kg)": {
+        "mean": 5.918537305629116,
+        "scale": 2.67259156381134
+      },
+      "H2OC (mmol/mol)": {
+        "mean": 9.474331567868541,
+        "scale": 4.262197380034497
+      },
+      "rho (g/m**3)": {
+        "mean": 1216.9890696883276,
+        "scale": 40.91723250038605
+      },
+      "wv (m/s)": {
+        "mean": 2.1516320228152375,
+        "scale": 1.4510508669458715
+      },
+      "max. wv (m/s)": {
+        "mean": 4.4379378692198,
+        "scale": 2.5752924855712185
+      },
+      "wd (deg)": {
+        "mean": 175.77702717373796,
+        "scale": 86.84616309223723
+      },
+      "hour_sin": {
+        "mean": 0.00013927347866412486,
+        "scale": 0.7071166057180812
+      },
+      "hour_cos": {
+        "mean": 5.768896374151111e-05,
+        "scale": 0.7070969404492012
+      },
+      "dayofyear_sin": {
+        "mean": 0.051191613659992106,
+        "scale": 0.7005359289681017
+      },
+      "dayofyear_cos": {
+        "mean": -0.017373111044091432,
+        "scale": 0.7115665857306219
+      },
+      "missing_p_mbar": {
+        "mean": 0.0,
+        "scale": 1.0
+      },
+      "missing_T_degC": {
+        "mean": 0.0,
+        "scale": 1.0
+      },
+      "missing_Tpot_K": {
+        "mean": 0.0,
+        "scale": 1.0
+      },
+      "missing_Tdew_degC": {
+        "mean": 0.0,
+        "scale": 1.0
+      },
+      "missing_rh_pct": {
+        "mean": 0.0,
+        "scale": 1.0
+      },
+      "missing_VPmax_mbar": {
+        "mean": 0.0,
+        "scale": 1.0
+      },
+      "missing_VPact_mbar": {
+        "mean": 0.0,
+        "scale": 1.0
+      },
+      "missing_VPdef_mbar": {
+        "mean": 0.0,
+        "scale": 1.0
+      },
+      "missing_sh_gkg": {
+        "mean": 0.0,
+        "scale": 1.0
+      },
+      "missing_H2OC_mmolmol": {
+        "mean": 0.0,
+        "scale": 1.0
+      },
+      "missing_rho_gm3": {
+        "mean": 0.0,
+        "scale": 1.0
+      },
+      "missing_wv_ms": {
+        "mean": 0.0,
+        "scale": 1.0
+      },
+      "missing_max_wv_ms": {
+        "mean": 0.0,
+        "scale": 1.0
+      },
+      "missing_wd_deg": {
+        "mean": 0.0,
+        "scale": 1.0
+      }
     }
   }
 }

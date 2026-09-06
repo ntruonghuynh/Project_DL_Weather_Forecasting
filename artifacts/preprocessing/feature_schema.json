@@ -112,13 +112,14 @@
   },
   "missing_policy": {
     "forward_fill_max_hours": 3,
-    "residual_fill": "median_fit_on_train_only",
+    "residual_fill": "left_as_nan_marks_window_invalid",
+    "residual_fill_amendment": "policy_version 1.1 (configs/data.yaml missing.*) removed the earlier median-fill fallback for gaps beyond forward_fill_max_hours - such gaps are left as NaN, which WeatherForecastDataset turns into a rejected sliding window instead of a fabricated value.",
     "missing_indicator": true,
     "backward_fill": false,
     "target_imputation": false
   },
   "scaler": {
-    "name": "train_only_scaler",
+    "name": "standard_scaler",
     "fit_scope": "train_only",
     "artifact_path": "artifacts/preprocessing/scaler.joblib"
   },

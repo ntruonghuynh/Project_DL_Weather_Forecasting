@@ -218,6 +218,85 @@ def test_windows_touching_a_gap_are_dropped() -> None:
         assert torch.isfinite(gapped_dataset[index]["y"]).all()
 
 
+def test_long_gap_survives_impute_and_rejects_touching_windows_end_to_end() -> None:
+    """Integration: preprocessing.impute_missing's output feeds dataset window rejection.
+
+    Unlike test_windows_touching_a_gap_are_dropped (which injects NaN
+    directly into the dataset), this drives two real gaps through
+    src.data.preprocessing.impute_missing first: a SHORT gap (fully closed by
+    forward-fill, zero remainder) placed far enough from a LONG gap (only its
+    first forward_fill_max_hours closed, remainder left NaN) that no single
+    240-hour window can touch both. This proves, end to end across both
+    modules, that a fully-closed short gap never rejects a window while a
+    long gap's leftover NaN rejects every window touching it.
+    """
+    from src.data.preprocessing import (
+        RAW_NUMERIC_COLUMNS,
+        impute_missing,
+    )
+    from src.data.preprocessing import (
+        TARGET_COLUMN as PP_TARGET_COLUMN,
+    )
+    from src.data.preprocessing import (
+        TIMESTAMP_COLUMN as PP_TIMESTAMP_COLUMN,
+    )
+
+    n_hours = 500
+    short_gap_start = 50
+    short_len = 3  # matches configs/data.yaml missing.forward_fill_max_hours - fully closable
+    long_gap_start = 350  # SAMPLE_SPAN (240h) away from the short gap - no window can span both
+    long_len = 10  # beyond forward_fill_max_hours - remainder must stay NaN
+    gap_column = next(c for c in RAW_NUMERIC_COLUMNS if c != PP_TARGET_COLUMN)
+
+    timestamps = pd.date_range("2020-01-01", periods=n_hours, freq="1h")
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame(
+        {PP_TIMESTAMP_COLUMN: timestamps}
+        | {column: rng.normal(size=n_hours) for column in RAW_NUMERIC_COLUMNS}
+    )
+    df.loc[short_gap_start : short_gap_start + short_len - 1, gap_column] = np.nan
+    df.loc[long_gap_start : long_gap_start + long_len - 1, gap_column] = np.nan
+    empty = df.iloc[0:0].copy()
+
+    imputed_df, _, _, _ = impute_missing(df, empty, empty, forward_fill_limit_hours=short_len)
+
+    short_gap_slice = imputed_df[gap_column].iloc[short_gap_start : short_gap_start + short_len]
+    assert short_gap_slice.notna().all(), (
+        "a gap no longer than forward_fill_max_hours must be fully forward-filled"
+    )
+    long_filled = imputed_df[gap_column].iloc[long_gap_start : long_gap_start + short_len]
+    long_remainder_end = long_gap_start + long_len
+    long_remainder = imputed_df[gap_column].iloc[long_gap_start + short_len : long_remainder_end]
+    assert long_filled.notna().all(), "the SHORT portion of the long gap must be forward-filled"
+    assert long_remainder.isna().all(), "the LONG remainder must stay NaN, never fabricated"
+
+    dataset = WeatherForecastDataset(
+        imputed_df, RAW_NUMERIC_COLUMNS, PP_TARGET_COLUMN, input_window=WINDOW, horizon=HORIZON
+    )
+    unfilled_timestamps = set(imputed_df.loc[imputed_df[gap_column].isna(), PP_TIMESTAMP_COLUMN])
+    short_gap_timestamps = set(timestamps[short_gap_start : short_gap_start + short_len])
+
+    # gap_column is an INPUT feature, never part of y - so only each window's INPUT
+    # span (not its forecast span) can legitimately be rejected by a NaN in it.
+    covers_unfilled_input = 0
+    covers_closed_short_gap_input = 0
+    for index in range(len(dataset)):
+        bounds = dataset.window_bounds(index)
+        input_span = set(pd.date_range(bounds["input_start"], bounds["input_end"], freq="1h"))
+        if unfilled_timestamps & input_span:
+            covers_unfilled_input += 1
+        if short_gap_timestamps & input_span:
+            covers_closed_short_gap_input += 1
+
+    assert covers_unfilled_input == 0, (
+        "no window's input period may touch a timestamp impute_missing left as NaN"
+    )
+    assert covers_closed_short_gap_input > 0, (
+        "a fully forward-filled short gap is all-finite and must not blanket-reject every "
+        "window whose input period merely passes through it"
+    )
+
+
 def test_timestamps_are_hourly_and_forecast_follows_input() -> None:
     """Timestamps step by exactly one hour, and forecast starts right after input ends."""
     df = make_hourly_df(SAMPLE_SPAN + 5)
@@ -261,6 +340,20 @@ def test_unsorted_timestamps_are_rejected() -> None:
 
     with pytest.raises(ValueError, match="sorted"):
         WeatherForecastDataset(shuffled, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON)
+
+
+def test_irregular_timestamp_spacing_is_rejected() -> None:
+    """Refuse to build windows when a row is missing from the hourly grid itself.
+
+    resample_hourly always fills every hour bin (a real gap becomes a NaN row,
+    not a missing timestamp), so a jump other than exactly 3600s means the
+    caller passed data that never went through preprocessing correctly.
+    """
+    df = make_hourly_df(SAMPLE_SPAN + 5)
+    df = df.drop(index=50).reset_index(drop=True)
+
+    with pytest.raises(ValueError, match="3600"):
+        WeatherForecastDataset(df, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON)
 
 
 def test_target_must_be_in_features() -> None:

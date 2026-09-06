@@ -1,0 +1,219 @@
+{
+  "schema_type": "pipeline_feature_schema",
+  "generated_by": "src.data.preprocessing.build_public_feature_schema",
+  "config_source": "configs/data.yaml",
+  "n_input_features": 32,
+  "target_column": "T (degC)",
+  "target_index": 1,
+  "features": [
+    {
+      "name": "p (mbar)",
+      "dtype": "float32",
+      "unit": "mbar",
+      "is_target": false
+    },
+    {
+      "name": "T (degC)",
+      "dtype": "float32",
+      "unit": "degC",
+      "is_target": true
+    },
+    {
+      "name": "Tpot (K)",
+      "dtype": "float32",
+      "unit": "K",
+      "is_target": false
+    },
+    {
+      "name": "Tdew (degC)",
+      "dtype": "float32",
+      "unit": "degC",
+      "is_target": false
+    },
+    {
+      "name": "rh (%)",
+      "dtype": "float32",
+      "unit": "%",
+      "is_target": false
+    },
+    {
+      "name": "VPmax (mbar)",
+      "dtype": "float32",
+      "unit": "mbar",
+      "is_target": false
+    },
+    {
+      "name": "VPact (mbar)",
+      "dtype": "float32",
+      "unit": "mbar",
+      "is_target": false
+    },
+    {
+      "name": "VPdef (mbar)",
+      "dtype": "float32",
+      "unit": "mbar",
+      "is_target": false
+    },
+    {
+      "name": "sh (g/kg)",
+      "dtype": "float32",
+      "unit": "g/kg",
+      "is_target": false
+    },
+    {
+      "name": "H2OC (mmol/mol)",
+      "dtype": "float32",
+      "unit": "mmol/mol",
+      "is_target": false
+    },
+    {
+      "name": "rho (g/m**3)",
+      "dtype": "float32",
+      "unit": "g/m**3",
+      "is_target": false
+    },
+    {
+      "name": "wv (m/s)",
+      "dtype": "float32",
+      "unit": "m/s",
+      "is_target": false
+    },
+    {
+      "name": "max. wv (m/s)",
+      "dtype": "float32",
+      "unit": "m/s",
+      "is_target": false
+    },
+    {
+      "name": "wd (deg)",
+      "dtype": "float32",
+      "unit": "deg",
+      "is_target": false
+    },
+    {
+      "name": "hour_sin",
+      "dtype": "float32",
+      "unit": "dimensionless",
+      "is_target": false
+    },
+    {
+      "name": "hour_cos",
+      "dtype": "float32",
+      "unit": "dimensionless",
+      "is_target": false
+    },
+    {
+      "name": "dayofyear_sin",
+      "dtype": "float32",
+      "unit": "dimensionless",
+      "is_target": false
+    },
+    {
+      "name": "dayofyear_cos",
+      "dtype": "float32",
+      "unit": "dimensionless",
+      "is_target": false
+    },
+    {
+      "name": "missing_p_mbar",
+      "dtype": "float32",
+      "unit": "dimensionless",
+      "is_target": false
+    },
+    {
+      "name": "missing_T_degC",
+      "dtype": "float32",
+      "unit": "dimensionless",
+      "is_target": false
+    },
+    {
+      "name": "missing_Tpot_K",
+      "dtype": "float32",
+      "unit": "dimensionless",
+      "is_target": false
+    },
+    {
+      "name": "missing_Tdew_degC",
+      "dtype": "float32",
+      "unit": "dimensionless",
+      "is_target": false
+    },
+    {
+      "name": "missing_rh_pct",
+      "dtype": "float32",
+      "unit": "dimensionless",
+      "is_target": false
+    },
+    {
+      "name": "missing_VPmax_mbar",
+      "dtype": "float32",
+      "unit": "dimensionless",
+      "is_target": false
+    },
+    {
+      "name": "missing_VPact_mbar",
+      "dtype": "float32",
+      "unit": "dimensionless",
+      "is_target": false
+    },
+    {
+      "name": "missing_VPdef_mbar",
+      "dtype": "float32",
+      "unit": "dimensionless",
+      "is_target": false
+    },
+    {
+      "name": "missing_sh_gkg",
+      "dtype": "float32",
+      "unit": "dimensionless",
+      "is_target": false
+    },
+    {
+      "name": "missing_H2OC_mmolmol",
+      "dtype": "float32",
+      "unit": "dimensionless",
+      "is_target": false
+    },
+    {
+      "name": "missing_rho_gm3",
+      "dtype": "float32",
+      "unit": "dimensionless",
+      "is_target": false
+    },
+    {
+      "name": "missing_wv_ms",
+      "dtype": "float32",
+      "unit": "dimensionless",
+      "is_target": false
+    },
+    {
+      "name": "missing_max_wv_ms",
+      "dtype": "float32",
+      "unit": "dimensionless",
+      "is_target": false
+    },
+    {
+      "name": "missing_wd_deg",
+      "dtype": "float32",
+      "unit": "dimensionless",
+      "is_target": false
+    }
+  ],
+  "window_contract": {
+    "input_length_hours": 168,
+    "horizon_hours": 72,
+    "x_shape": "[168, 32]",
+    "y_shape": "[72, 1]"
+  },
+  "missing_policy": {
+    "forward_fill_max_hours": 3,
+    "backward_fill": false,
+    "interpolate": false,
+    "target_missing_rule": "never_imputed"
+  },
+  "scaling": {
+    "method": "standard_scaler",
+    "fit_scope": "train_only",
+    "artifact_path": "artifacts/preprocessing/scaler.joblib"
+  }
+}

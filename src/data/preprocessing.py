@@ -1,8 +1,9 @@
 """Leakage-safe preprocessing pipeline for the Jena Climate dataset (TV2).
 
-Raw CSV (10-minute) -> timestamp cleaning -> hourly resampling -> time
-feature engineering -> missingness indicators -> chronological split ->
-input imputation -> feature scaling -> processed CSV + artifacts.
+Raw CSV (10-minute) -> timestamp cleaning -> sentinel handling (-9999 -> NaN)
+-> hourly resampling -> time feature engineering -> missingness indicators
+-> chronological split -> input imputation -> feature scaling -> processed
+CSV + artifacts.
 
 This module implements the contract already approved and locked in:
   - artifacts/preprocessing/tv2_data_cleaning_policy.json (cleaning/aggregation/
@@ -20,6 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -28,7 +30,8 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
-from .validator import EXPECTED_COLUMNS, TARGET_COLUMN, TIMESTAMP_COLUMN
+from ..config import load_data_config
+from .validator import EXPECTED_COLUMNS, TARGET_COLUMN, TIMESTAMP_COLUMN, TIMESTAMP_FORMAT
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +42,19 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 LOCKED_SCHEMA_PATH = PROJECT_ROOT / "artifacts" / "preprocessing" / "feature_schema.json"
 
+# Single Source of Truth: configs/data.yaml (see src/config.py). Do not
+# hard-code split ratios, gap thresholds, or the scaling rule elsewhere.
+_CONFIG = load_data_config()
+_SPLIT_CFG = _CONFIG["split"]
+_MISSING_CFG = _CONFIG["missing"]
+_SCALING_CFG = _CONFIG["scaling"]
+
 DEFAULT_CONFIG: dict[str, Any] = {
-    "train_fraction": 0.70,
-    "val_fraction": 0.15,
-    "forward_fill_limit_hours": 3,
+    "train_fraction": _SPLIT_CFG["train_fraction"],
+    "val_fraction": _SPLIT_CFG["validation_fraction"],
+    "forward_fill_limit_hours": _MISSING_CFG["forward_fill_max_hours"],
     "artifacts_dir": str(PROJECT_ROOT / "artifacts" / "preprocessing"),
 }
-
-TIMESTAMP_FORMAT = "%d.%m.%Y %H:%M:%S"  # kept in sync with validator.py's parser
 
 # ---------------------------------------------------------------------------
 # Column policy (mirrors artifacts/preprocessing/tv2_data_cleaning_policy.json)
@@ -99,6 +107,10 @@ FEATURE_COLUMNS: list[str] = (
 )
 TARGET_INDEX = FEATURE_COLUMNS.index(TARGET_COLUMN)
 
+assert _MISSING_CFG["target_missing_rule"] == "never_imputed", (
+    "configs/data.yaml missing.target_missing_rule changed - INPUT_IMPUTE_COLUMNS below "
+    "must be updated to match before this assertion can be removed"
+)
 # Target is excluded: T (degC) is never forward-filled or median-filled (see impute_missing).
 INPUT_IMPUTE_COLUMNS: list[str] = [c for c in RAW_NUMERIC_COLUMNS if c != TARGET_COLUMN]
 
@@ -184,6 +196,60 @@ def clean_timestamps(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any]]:
         len(df),
         n_exact_duplicates_dropped,
         n_conflicting_groups,
+    )
+    return df, report
+
+
+# ---------------------------------------------------------------------------
+# B2. Sentinel handling
+# ---------------------------------------------------------------------------
+
+
+def handle_sentinels(
+    df: pd.DataFrame,
+    sentinel_values: list[float] | None = None,
+    sentinel_columns: list[str] | None = None,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Replace known invalid-reading sentinel codes (e.g. -9999) with NaN.
+
+    Must run before resample_hourly: a sentinel is a numeric placeholder for
+    "no real reading" (this raw file's wind sensors emit -9999 instead of a
+    blank cell), so if it survives into a mean/max aggregation it silently
+    corrupts every hour that includes it. This function only replaces the
+    value - no interpolation and no backward-fill happen here or anywhere in
+    this pipeline; a sentinel becomes a genuine missing value, subject to
+    the exact same forward-fill / long-gap policy as any other gap
+    (see impute_missing).
+    """
+    sentinel_values = (
+        sentinel_values if sentinel_values is not None else _MISSING_CFG["sentinel_values"]
+    )
+    sentinel_columns = (
+        sentinel_columns if sentinel_columns is not None else _MISSING_CFG["sentinel_columns"]
+    )
+
+    df = df.copy()
+    replaced_by_column: dict[str, int] = {}
+    for column in sentinel_columns:
+        if column not in df.columns:
+            continue
+        mask = df[column].isin(sentinel_values)
+        replaced_by_column[column] = int(mask.sum())
+        df.loc[mask, column] = np.nan
+
+    report = {
+        "sentinel_values": list(sentinel_values),
+        "sentinel_columns": list(sentinel_columns),
+        "replaced_by_column": replaced_by_column,
+        "total_replaced": sum(replaced_by_column.values()),
+        "applied_before": "resample_hourly",
+        "backward_fill": False,
+        "interpolate": False,
+    }
+    logger.info(
+        "Sentinel handling: replaced %d value(s) with NaN across %s",
+        report["total_replaced"],
+        list(replaced_by_column.keys()),
     )
     return df, report
 
@@ -279,7 +345,9 @@ def add_missing_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def temporal_split(
-    df: pd.DataFrame, train_fraction: float = 0.70, val_fraction: float = 0.15
+    df: pd.DataFrame,
+    train_fraction: float = DEFAULT_CONFIG["train_fraction"],
+    val_fraction: float = DEFAULT_CONFIG["val_fraction"],
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     """Chronological, non-shuffled split: train is the oldest slice, test the newest.
 
@@ -338,24 +406,40 @@ def impute_missing(
     train_df: pd.DataFrame,
     val_df: pd.DataFrame,
     test_df: pd.DataFrame,
-    forward_fill_limit_hours: int = 3,
+    forward_fill_limit_hours: int = DEFAULT_CONFIG["forward_fill_limit_hours"],
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict[str, Any]]:
-    """Fill missing INPUT features without leaking future or cross-split information.
+    """Forward-fill short gaps in INPUT features; leave long gaps as NaN.
 
-    Order is fixed by policy (artifacts/preprocessing/tv2_data_cleaning_policy.json):
+    Order is fixed by policy (configs/data.yaml missing.*):
       1. Split first (done by the caller before this runs).
-      2. Forward-fill up to `forward_fill_limit_hours`, independently within
-         each split - never across the train/val/test boundary, and never
-         backward (backfilling would leak a future value into the past).
-      3. Anything still missing is filled with the TRAIN split's median,
-         computed once on train and reused for validation/test, so no
-         statistic is ever derived from data the model should not see yet.
+      2. Causal forward-fill up to `forward_fill_limit_hours`, independently
+         within each split - never across the train/val/test boundary,
+         never backward (backfilling would leak a future value into the
+         past), and never interpolated (that would fabricate a smooth trend
+         through hours that were never observed).
+      3. Anything still missing after that - i.e. every gap longer than the
+         short-gap threshold, "long" and "critical" alike - is deliberately
+         left as NaN, not median-filled or otherwise fabricated. A NaN input
+         feature makes any sliding window that touches it invalid (see
+         WeatherForecastDataset._find_valid_starts / window_rejection_rule
+         in configs/data.yaml), which is exactly how a long gap is "marked
+         invalid" at the window-building stage.
 
     The target column T (degC) is excluded entirely: it is never
-    forward-filled or median-filled. Its gaps are preserved so a later step
-    can drop forecast windows with a missing target instead of training
-    against a fabricated value (see missing_T_degC in add_missing_indicators).
+    forward-filled and never left with a fabricated value, regardless of
+    gap length (see missing_T_degC in add_missing_indicators).
     """
+    if _MISSING_CFG["backward_fill"]:
+        raise NotImplementedError(
+            "configs/data.yaml missing.backward_fill=true is not implemented; "
+            "impute_missing only ever forward-fills."
+        )
+    if _MISSING_CFG.get("interpolate", False):
+        raise NotImplementedError(
+            "configs/data.yaml missing.interpolate=true is not implemented; "
+            "impute_missing never interpolates."
+        )
+
     train_df = train_df.copy()
     val_df = val_df.copy()
     test_df = test_df.copy()
@@ -364,11 +448,6 @@ def impute_missing(
         split_df[INPUT_IMPUTE_COLUMNS] = split_df[INPUT_IMPUTE_COLUMNS].ffill(
             limit=forward_fill_limit_hours
         )
-
-    train_medians = train_df[INPUT_IMPUTE_COLUMNS].median()
-
-    for split_df in (train_df, val_df, test_df):
-        split_df[INPUT_IMPUTE_COLUMNS] = split_df[INPUT_IMPUTE_COLUMNS].fillna(train_medians)
 
     remaining_input_missing = {
         "train": int(train_df[INPUT_IMPUTE_COLUMNS].isna().sum().sum()),
@@ -382,16 +461,16 @@ def impute_missing(
     }
     report = {
         "forward_fill_limit_hours": forward_fill_limit_hours,
-        "median_fit_scope": "train_only",
+        "residual_missing_policy": "left_as_nan_marks_window_invalid",
         "backward_fill": False,
+        "interpolate": False,
         "target_column_imputed": False,
-        "train_median": {k: float(v) for k, v in train_medians.items()},
         "remaining_missing_after_fill": remaining_input_missing,
         "remaining_missing_target": remaining_target_missing,
     }
     logger.info(
-        "Missing-value handling done. Remaining input NaNs: train=%d val=%d test=%d. "
-        "Target left unimputed with NaNs: train=%d val=%d test=%d",
+        "Missing-value handling done. Remaining input NaNs (long/critical gaps, left as-is): "
+        "train=%d val=%d test=%d. Target left unimputed with NaNs: train=%d val=%d test=%d",
         remaining_input_missing["train"],
         remaining_input_missing["validation"],
         remaining_input_missing["test"],
@@ -422,6 +501,14 @@ def scale_features(
     nanstd and passes NaN through transform() unchanged, so the
     intentionally-unimputed target keeps its missing values here too.
     """
+    if _SCALING_CFG["binary_feature_scaling_rule"] != "include_in_standard_scaler":
+        raise NotImplementedError(
+            "configs/data.yaml scaling.binary_feature_scaling_rule="
+            f"{_SCALING_CFG['binary_feature_scaling_rule']!r} is not implemented; "
+            "scale_features always scales every column in feature_columns "
+            "(including missing_* indicators) with the same StandardScaler."
+        )
+
     scaler = StandardScaler()
     scaler.fit(train_df[feature_columns])
 
@@ -434,6 +521,105 @@ def scale_features(
         "Fitted StandardScaler on %d train rows, %d features", len(train_df), len(feature_columns)
     )
     return _transform(train_df), _transform(val_df), _transform(test_df), scaler
+
+
+def inverse_transform_target(
+    scaled_target: np.ndarray, scaler: StandardScaler, target_index: int = TARGET_INDEX
+) -> np.ndarray:
+    """Undo scale_features for the target column only, e.g. a model's z-scored predictions.
+
+    StandardScaler.inverse_transform expects a full feature-width row, so
+    callers with only a target column (a prediction tensor, not a feature
+    matrix) would otherwise have to reconstruct 31 unused columns just to
+    invert one. This applies the same fitted mean_/scale_ directly to an
+    array of any shape, using only the target's own two scalars.
+    """
+    return scaled_target * scaler.scale_[target_index] + scaler.mean_[target_index]
+
+
+def _scaler_info(scaler: StandardScaler, feature_columns: list[str]) -> dict[str, Any]:
+    """Human-readable scaler metadata mirrored alongside the binary scaler.joblib.
+
+    scaler.joblib is what code loads; this dict is what a person (or a
+    metadata check) reads without deserializing pickled state.
+    """
+    return {
+        "method": _SCALING_CFG["method"],
+        "fit_scope": _SCALING_CFG["fit_scope"],
+        "binary_feature_scaling_rule": _SCALING_CFG["binary_feature_scaling_rule"],
+        "n_features": len(feature_columns),
+        "n_samples_seen": int(scaler.n_samples_seen_),
+        "per_feature": {
+            column: {"mean": float(mean), "scale": float(scale)}
+            for column, mean, scale in zip(feature_columns, scaler.mean_, scaler.scale_)
+        },
+    }
+
+
+def _infer_unit(column_name: str) -> str:
+    """Physical unit parsed from a raw column's own name, e.g. 'p (mbar)' -> 'mbar'.
+
+    Every raw Jena Climate column already encodes its unit in a trailing
+    '(...)' - reading it from the name itself (the single place it is
+    defined) avoids maintaining a second, driftable unit table by hand.
+    """
+    match = re.search(r"\(([^)]+)\)\s*$", column_name)
+    return match.group(1) if match else "dimensionless"
+
+
+def build_public_feature_schema(
+    feature_columns: list[str] = FEATURE_COLUMNS,
+    target_column: str = TARGET_COLUMN,
+    target_index: int = TARGET_INDEX,
+) -> dict[str, Any]:
+    """Fresh, pipeline-generated feature schema for downstream (Model Team) consumers.
+
+    Unlike LOCKED_SCHEMA_PATH (a hand-approved contract this pipeline
+    validates against - see `_assert_matches_locked_schema`), this is
+    rebuilt from the live FEATURE_COLUMNS/TARGET_* constants and
+    `configs/data.yaml` on every `preprocess()` run, so it can never silently
+    drift from what actually executed. Written to `artifacts/feature_schema.json`.
+    """
+    features = []
+    for column in feature_columns:
+        is_engineered = column in TIME_FEATURE_COLUMNS or column in INDICATOR_NAME_MAP.values()
+        features.append(
+            {
+                "name": column,
+                "dtype": "float32",
+                "unit": "dimensionless" if is_engineered else _infer_unit(column),
+                "is_target": column == target_column,
+            }
+        )
+
+    input_length_hours = _CONFIG["window"]["input_length_hours"]
+    horizon_hours = _CONFIG["window"]["horizon_hours"]
+    return {
+        "schema_type": "pipeline_feature_schema",
+        "generated_by": "src.data.preprocessing.build_public_feature_schema",
+        "config_source": "configs/data.yaml",
+        "n_input_features": len(feature_columns),
+        "target_column": target_column,
+        "target_index": target_index,
+        "features": features,
+        "window_contract": {
+            "input_length_hours": input_length_hours,
+            "horizon_hours": horizon_hours,
+            "x_shape": f"[{input_length_hours}, {len(feature_columns)}]",
+            "y_shape": f"[{horizon_hours}, 1]",
+        },
+        "missing_policy": {
+            "forward_fill_max_hours": _MISSING_CFG["forward_fill_max_hours"],
+            "backward_fill": _MISSING_CFG["backward_fill"],
+            "interpolate": _MISSING_CFG["interpolate"],
+            "target_missing_rule": _MISSING_CFG["target_missing_rule"],
+        },
+        "scaling": {
+            "method": _SCALING_CFG["method"],
+            "fit_scope": _SCALING_CFG["fit_scope"],
+            "artifact_path": "artifacts/preprocessing/scaler.joblib",
+        },
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -508,7 +694,8 @@ def preprocess(raw_path: Path, output_dir: Path, config: dict[str, Any] | None =
 
     raw_df = load_raw_data(raw_path)
     clean_df, cleaning_report = clean_timestamps(raw_df)
-    hourly_df = resample_hourly(clean_df)
+    sentinel_df, sentinel_report = handle_sentinels(clean_df)
+    hourly_df = resample_hourly(sentinel_df)
     hourly_df = add_time_features(hourly_df)
     hourly_df = add_missing_indicators(hourly_df)
 
@@ -538,12 +725,19 @@ def preprocess(raw_path: Path, output_dir: Path, config: dict[str, Any] | None =
     split_metadata = {
         **split_metadata,
         "cleaning": cleaning_report,
+        "sentinel_handling": sentinel_report,
         "missing_handling": impute_report,
+        "scaling": _scaler_info(scaler, FEATURE_COLUMNS),
     }
     _write_json(artifacts_dir / "split_metadata.json", split_metadata)
     _write_json(output_dir / "split_metadata.json", split_metadata)
 
     _write_json(output_dir / "feature_schema.json", schema)
+
+    # Fresh, always-in-sync feature schema for the Model Team - regenerated
+    # every run from live FEATURE_COLUMNS/config, distinct from the
+    # hand-approved LOCKED_SCHEMA_PATH this function validates against above.
+    _write_json(PROJECT_ROOT / "artifacts" / "feature_schema.json", build_public_feature_schema())
 
     logger.info(
         "Preprocessing complete: train=%d val=%d test=%d rows, %d features -> %s",

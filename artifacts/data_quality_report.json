@@ -1,135 +1,488 @@
 {
-  "report_type": "raw_data_quality_precheck",
-  "status": "REQUIRES_DUPLICATE_AND_GAP_POLICY",
-  "generated_at": "2026-08-31",
-  "source_file": "data/raw/jena_climate_2009_2016.csv",
-  "dataset_name": "Jena Climate Dataset",
-  "dataset_slug": "mnassrib/jena-climate",
-  "source_url": "https://www.kaggle.com/datasets/mnassrib/jena-climate",
-  "raw_file_immutable": true,
+  "report_type": "raw_data_quality_report",
+  "generated_by": "src.data.validator.generate_data_quality_report",
+  "generated_at": "2026-09-05T15:00:10.539268+00:00",
+  "source_file": "E:\\Project_Deep\\Project_DL_Weather_Forecasting\\data\\raw\\jena_climate_2009_2016.csv",
+  "config_source": "configs/data.yaml",
   "row_count": 420551,
   "column_count": 15,
-  "columns": [
-    "Date Time",
-    "p (mbar)",
-    "T (degC)",
-    "Tpot (K)",
-    "Tdew (degC)",
-    "rh (%)",
-    "VPmax (mbar)",
-    "VPact (mbar)",
-    "VPdef (mbar)",
-    "sh (g/kg)",
-    "H2OC (mmol/mol)",
-    "rho (g/m**3)",
-    "wv (m/s)",
-    "max. wv (m/s)",
-    "wd (deg)"
-  ],
+  "feature_count": 14,
+  "schema": {
+    "expected_columns": [
+      "Date Time",
+      "p (mbar)",
+      "T (degC)",
+      "Tpot (K)",
+      "Tdew (degC)",
+      "rh (%)",
+      "VPmax (mbar)",
+      "VPact (mbar)",
+      "VPdef (mbar)",
+      "sh (g/kg)",
+      "H2OC (mmol/mol)",
+      "rho (g/m**3)",
+      "wv (m/s)",
+      "max. wv (m/s)",
+      "wd (deg)"
+    ],
+    "actual_columns": [
+      "Date Time",
+      "p (mbar)",
+      "T (degC)",
+      "Tpot (K)",
+      "Tdew (degC)",
+      "rh (%)",
+      "VPmax (mbar)",
+      "VPact (mbar)",
+      "VPdef (mbar)",
+      "sh (g/kg)",
+      "H2OC (mmol/mol)",
+      "rho (g/m**3)",
+      "wv (m/s)",
+      "max. wv (m/s)",
+      "wd (deg)"
+    ],
+    "missing_columns": [],
+    "unexpected_columns": [],
+    "columns_match_expected": true,
+    "target_column": "T (degC)",
+    "target_column_exists": true,
+    "dtype_check": {
+      "Date Time": {
+        "expected_type": "datetime",
+        "parse_errors": 0,
+        "valid": true
+      },
+      "p (mbar)": {
+        "expected_type": "numeric",
+        "non_numeric_count": 0,
+        "infinite_count": 0,
+        "valid": true
+      },
+      "T (degC)": {
+        "expected_type": "numeric",
+        "non_numeric_count": 0,
+        "infinite_count": 0,
+        "valid": true
+      },
+      "Tpot (K)": {
+        "expected_type": "numeric",
+        "non_numeric_count": 0,
+        "infinite_count": 0,
+        "valid": true
+      },
+      "Tdew (degC)": {
+        "expected_type": "numeric",
+        "non_numeric_count": 0,
+        "infinite_count": 0,
+        "valid": true
+      },
+      "rh (%)": {
+        "expected_type": "numeric",
+        "non_numeric_count": 0,
+        "infinite_count": 0,
+        "valid": true
+      },
+      "VPmax (mbar)": {
+        "expected_type": "numeric",
+        "non_numeric_count": 0,
+        "infinite_count": 0,
+        "valid": true
+      },
+      "VPact (mbar)": {
+        "expected_type": "numeric",
+        "non_numeric_count": 0,
+        "infinite_count": 0,
+        "valid": true
+      },
+      "VPdef (mbar)": {
+        "expected_type": "numeric",
+        "non_numeric_count": 0,
+        "infinite_count": 0,
+        "valid": true
+      },
+      "sh (g/kg)": {
+        "expected_type": "numeric",
+        "non_numeric_count": 0,
+        "infinite_count": 0,
+        "valid": true
+      },
+      "H2OC (mmol/mol)": {
+        "expected_type": "numeric",
+        "non_numeric_count": 0,
+        "infinite_count": 0,
+        "valid": true
+      },
+      "rho (g/m**3)": {
+        "expected_type": "numeric",
+        "non_numeric_count": 0,
+        "infinite_count": 0,
+        "valid": true
+      },
+      "wv (m/s)": {
+        "expected_type": "numeric",
+        "non_numeric_count": 0,
+        "infinite_count": 0,
+        "valid": true
+      },
+      "max. wv (m/s)": {
+        "expected_type": "numeric",
+        "non_numeric_count": 0,
+        "infinite_count": 0,
+        "valid": true
+      },
+      "wd (deg)": {
+        "expected_type": "numeric",
+        "non_numeric_count": 0,
+        "infinite_count": 0,
+        "valid": true
+      }
+    },
+    "status": "PASS"
+  },
   "timestamp": {
     "format": "%d.%m.%Y %H:%M:%S",
     "parse_errors": 0,
     "date_min": "2009-01-01T00:10:00",
     "date_max": "2017-01-01T00:00:00",
-    "mode_interval_minutes": 10.0,
     "monotonic_in_file": false,
-    "duplicate_timestamp_groups": 327,
     "duplicate_rows_after_first": 327,
-    "duplicate_values_identical": true,
-    "duplicate_ranges": [
+    "expected_frequency_minutes": 10,
+    "mode_interval_minutes": 10.0,
+    "gap_count": 5
+  },
+  "missing_summary": {
+    "total_missing_cells": 0,
+    "total_cells": 6308265,
+    "missing_rate_overall": 0.0,
+    "by_column": [
       {
-        "start": "2010-07-01T00:10:00",
-        "end": "2010-07-02T00:00:00",
-        "timestamp_count": 144
+        "column": "Date Time",
+        "missing_count": 0,
+        "missing_rate": 0.0
       },
       {
-        "start": "2014-03-20T11:00:00",
-        "end": "2014-03-21T17:20:00",
-        "timestamp_count": 183
+        "column": "p (mbar)",
+        "missing_count": 0,
+        "missing_rate": 0.0
+      },
+      {
+        "column": "T (degC)",
+        "missing_count": 0,
+        "missing_rate": 0.0
+      },
+      {
+        "column": "Tpot (K)",
+        "missing_count": 0,
+        "missing_rate": 0.0
+      },
+      {
+        "column": "Tdew (degC)",
+        "missing_count": 0,
+        "missing_rate": 0.0
+      },
+      {
+        "column": "rh (%)",
+        "missing_count": 0,
+        "missing_rate": 0.0
+      },
+      {
+        "column": "VPmax (mbar)",
+        "missing_count": 0,
+        "missing_rate": 0.0
+      },
+      {
+        "column": "VPact (mbar)",
+        "missing_count": 0,
+        "missing_rate": 0.0
+      },
+      {
+        "column": "VPdef (mbar)",
+        "missing_count": 0,
+        "missing_rate": 0.0
+      },
+      {
+        "column": "sh (g/kg)",
+        "missing_count": 0,
+        "missing_rate": 0.0
+      },
+      {
+        "column": "H2OC (mmol/mol)",
+        "missing_count": 0,
+        "missing_rate": 0.0
+      },
+      {
+        "column": "rho (g/m**3)",
+        "missing_count": 0,
+        "missing_rate": 0.0
+      },
+      {
+        "column": "wv (m/s)",
+        "missing_count": 0,
+        "missing_rate": 0.0
+      },
+      {
+        "column": "max. wv (m/s)",
+        "missing_count": 0,
+        "missing_rate": 0.0
+      },
+      {
+        "column": "wd (deg)",
+        "missing_count": 0,
+        "missing_rate": 0.0
       }
     ],
-    "unique_timestamp_gaps": 5,
-    "gaps": [
+    "columns_affected": []
+  },
+  "sentinel_summary": {
+    "sentinel_values": [
+      -9999,
+      -9999.0
+    ],
+    "sentinel_columns": [
+      "wv (m/s)",
+      "max. wv (m/s)"
+    ],
+    "total_sentinel_count": 38,
+    "total_checked_cells": 841102,
+    "sentinel_rate_overall": 4.5e-05,
+    "by_column": [
       {
-        "after": "2009-10-08T09:40:00",
-        "before": "2009-10-08T10:10:00",
-        "interval_minutes": 30
+        "column": "wv (m/s)",
+        "sentinel_count": 18,
+        "sentinel_rate": 4.3e-05,
+        "positions": [
+          {
+            "row_index": 343578,
+            "Date Time": "13.07.2015 09:10:00"
+          },
+          {
+            "row_index": 343579,
+            "Date Time": "13.07.2015 09:20:00"
+          },
+          {
+            "row_index": 343580,
+            "Date Time": "13.07.2015 09:30:00"
+          },
+          {
+            "row_index": 343581,
+            "Date Time": "13.07.2015 09:40:00"
+          },
+          {
+            "row_index": 343582,
+            "Date Time": "13.07.2015 09:50:00"
+          },
+          {
+            "row_index": 343583,
+            "Date Time": "13.07.2015 10:00:00"
+          },
+          {
+            "row_index": 343584,
+            "Date Time": "13.07.2015 10:10:00"
+          },
+          {
+            "row_index": 343585,
+            "Date Time": "13.07.2015 10:20:00"
+          },
+          {
+            "row_index": 343586,
+            "Date Time": "13.07.2015 10:30:00"
+          },
+          {
+            "row_index": 343587,
+            "Date Time": "13.07.2015 10:40:00"
+          },
+          {
+            "row_index": 343588,
+            "Date Time": "13.07.2015 10:50:00"
+          },
+          {
+            "row_index": 343589,
+            "Date Time": "13.07.2015 11:00:00"
+          },
+          {
+            "row_index": 343590,
+            "Date Time": "13.07.2015 11:10:00"
+          },
+          {
+            "row_index": 343591,
+            "Date Time": "13.07.2015 11:20:00"
+          },
+          {
+            "row_index": 343592,
+            "Date Time": "13.07.2015 11:30:00"
+          },
+          {
+            "row_index": 343593,
+            "Date Time": "13.07.2015 11:40:00"
+          },
+          {
+            "row_index": 343594,
+            "Date Time": "13.07.2015 11:50:00"
+          },
+          {
+            "row_index": 343595,
+            "Date Time": "13.07.2015 12:00:00"
+          }
+        ]
       },
       {
-        "after": "2013-05-16T08:50:00",
-        "before": "2013-05-16T09:10:00",
-        "interval_minutes": 20
-      },
-      {
-        "after": "2014-07-30T08:00:00",
-        "before": "2014-07-30T08:20:00",
-        "interval_minutes": 20
-      },
-      {
-        "after": "2014-09-24T17:00:00",
-        "before": "2014-09-25T09:00:00",
-        "interval_minutes": 960
-      },
-      {
-        "after": "2016-10-25T10:30:00",
-        "before": "2016-10-28T12:50:00",
-        "interval_minutes": 4460
+        "column": "max. wv (m/s)",
+        "sentinel_count": 20,
+        "sentinel_rate": 4.8e-05,
+        "positions": [
+          {
+            "row_index": 343577,
+            "Date Time": "13.07.2015 09:00:00"
+          },
+          {
+            "row_index": 343578,
+            "Date Time": "13.07.2015 09:10:00"
+          },
+          {
+            "row_index": 343579,
+            "Date Time": "13.07.2015 09:20:00"
+          },
+          {
+            "row_index": 343580,
+            "Date Time": "13.07.2015 09:30:00"
+          },
+          {
+            "row_index": 343581,
+            "Date Time": "13.07.2015 09:40:00"
+          },
+          {
+            "row_index": 343582,
+            "Date Time": "13.07.2015 09:50:00"
+          },
+          {
+            "row_index": 343583,
+            "Date Time": "13.07.2015 10:00:00"
+          },
+          {
+            "row_index": 343584,
+            "Date Time": "13.07.2015 10:10:00"
+          },
+          {
+            "row_index": 343585,
+            "Date Time": "13.07.2015 10:20:00"
+          },
+          {
+            "row_index": 343586,
+            "Date Time": "13.07.2015 10:30:00"
+          },
+          {
+            "row_index": 343587,
+            "Date Time": "13.07.2015 10:40:00"
+          },
+          {
+            "row_index": 343588,
+            "Date Time": "13.07.2015 10:50:00"
+          },
+          {
+            "row_index": 343589,
+            "Date Time": "13.07.2015 11:00:00"
+          },
+          {
+            "row_index": 343590,
+            "Date Time": "13.07.2015 11:10:00"
+          },
+          {
+            "row_index": 343591,
+            "Date Time": "13.07.2015 11:20:00"
+          },
+          {
+            "row_index": 343592,
+            "Date Time": "13.07.2015 11:30:00"
+          },
+          {
+            "row_index": 343593,
+            "Date Time": "13.07.2015 11:40:00"
+          },
+          {
+            "row_index": 343594,
+            "Date Time": "13.07.2015 11:50:00"
+          },
+          {
+            "row_index": 343595,
+            "Date Time": "13.07.2015 12:00:00"
+          },
+          {
+            "row_index": 343596,
+            "Date Time": "13.07.2015 12:10:00"
+          }
+        ]
       }
     ]
   },
-  "missing_by_column": {
-    "Date Time": 0,
-    "p (mbar)": 0,
-    "T (degC)": 0,
-    "Tpot (K)": 0,
-    "Tdew (degC)": 0,
-    "rh (%)": 0,
-    "VPmax (mbar)": 0,
-    "VPact (mbar)": 0,
-    "VPdef (mbar)": 0,
-    "sh (g/kg)": 0,
-    "H2OC (mmol/mol)": 0,
-    "rho (g/m**3)": 0,
-    "wv (m/s)": 0,
-    "max. wv (m/s)": 0,
-    "wd (deg)": 0
+  "gap_summary": {
+    "short_gap_threshold_hours": 3,
+    "long_gap_threshold_hours": 24,
+    "critical_gap_threshold_hours": 24,
+    "split_boundaries": [
+      {
+        "split": "train",
+        "start": "2009-01-01T00:10:00",
+        "end": "2014-08-08T09:39:00"
+      },
+      {
+        "split": "validation",
+        "start": "2014-08-08T09:39:00",
+        "end": "2015-10-20T16:49:30"
+      },
+      {
+        "split": "test",
+        "start": "2015-10-20T16:49:30",
+        "end": "2017-01-01T00:00:00"
+      }
+    ],
+    "gap_count": 5,
+    "gaps": [
+      {
+        "start": "2009-10-08T09:40:00",
+        "end": "2009-10-08T10:10:00",
+        "missing_hours": 0.5,
+        "severity": "SHORT",
+        "split": "train"
+      },
+      {
+        "start": "2013-05-16T08:50:00",
+        "end": "2013-05-16T09:10:00",
+        "missing_hours": 0.3333,
+        "severity": "SHORT",
+        "split": "train"
+      },
+      {
+        "start": "2014-07-30T08:00:00",
+        "end": "2014-07-30T08:20:00",
+        "missing_hours": 0.3333,
+        "severity": "SHORT",
+        "split": "train"
+      },
+      {
+        "start": "2014-09-24T17:00:00",
+        "end": "2014-09-25T09:00:00",
+        "missing_hours": 16.0,
+        "severity": "LONG",
+        "split": "validation"
+      },
+      {
+        "start": "2016-10-25T10:30:00",
+        "end": "2016-10-28T12:50:00",
+        "missing_hours": 74.3333,
+        "severity": "CRITICAL",
+        "split": "test"
+      }
+    ]
   },
-  "non_numeric_values_by_numeric_column": {
-    "p (mbar)": 0,
-    "T (degC)": 0,
-    "Tpot (K)": 0,
-    "Tdew (degC)": 0,
-    "rh (%)": 0,
-    "VPmax (mbar)": 0,
-    "VPact (mbar)": 0,
-    "VPdef (mbar)": 0,
-    "sh (g/kg)": 0,
-    "H2OC (mmol/mol)": 0,
-    "rho (g/m**3)": 0,
-    "wv (m/s)": 0,
-    "max. wv (m/s)": 0,
-    "wd (deg)": 0
-  },
-  "infinite_values_by_numeric_column": {
-    "p (mbar)": 0,
-    "T (degC)": 0,
-    "Tpot (K)": 0,
-    "Tdew (degC)": 0,
-    "rh (%)": 0,
-    "VPmax (mbar)": 0,
-    "VPact (mbar)": 0,
-    "VPdef (mbar)": 0,
-    "sh (g/kg)": 0,
-    "H2OC (mmol/mol)": 0,
-    "rho (g/m**3)": 0,
-    "wv (m/s)": 0,
-    "max. wv (m/s)": 0,
-    "wd (deg)": 0
-  },
-  "constant_columns": [],
-  "required_follow_up": [
-    "Define and record duplicate resolution before resampling; raw CSV must remain unchanged.",
-    "Define and record gap handling before creating hourly data and windows.",
-    "Generate the final validator-backed report and locked feature schema after policy approval."
-  ]
+  "quality_status": {
+    "schema_status": "PASS",
+    "timestamp_parse_status": "PASS",
+    "monotonic_status": "FAIL",
+    "duplicate_status": "REVIEW",
+    "missing_status": "PASS",
+    "sentinel_status": "REVIEW",
+    "gap_status": "REVIEW",
+    "overall_status": "FAIL"
+  }
 }

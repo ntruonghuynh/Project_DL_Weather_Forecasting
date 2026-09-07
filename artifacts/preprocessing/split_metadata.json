@@ -66,8 +66,8 @@
   "scaling": {
     "method": "standard_scaler",
     "fit_scope": "train_only",
-    "binary_feature_scaling_rule": "include_in_standard_scaler",
-    "n_features": 32,
+    "binary_feature_scaling_rule": "exclude_from_standard_scaler",
+    "n_features": 18,
     "n_samples_seen": 49090,
     "per_feature": {
       "p (mbar)": {
@@ -127,11 +127,11 @@
         "scale": 86.84616309223723
       },
       "hour_sin": {
-        "mean": 0.00013927347866412486,
+        "mean": 0.0001392734786641207,
         "scale": 0.7071166057180812
       },
       "hour_cos": {
-        "mean": 5.768896374151111e-05,
+        "mean": 5.768896374151082e-05,
         "scale": 0.7070969404492012
       },
       "dayofyear_sin": {
@@ -139,64 +139,8 @@
         "scale": 0.7005359289681017
       },
       "dayofyear_cos": {
-        "mean": -0.017373111044091432,
+        "mean": -0.017373111044091442,
         "scale": 0.7115665857306219
-      },
-      "missing_p_mbar": {
-        "mean": 0.0,
-        "scale": 1.0
-      },
-      "missing_T_degC": {
-        "mean": 0.0,
-        "scale": 1.0
-      },
-      "missing_Tpot_K": {
-        "mean": 0.0,
-        "scale": 1.0
-      },
-      "missing_Tdew_degC": {
-        "mean": 0.0,
-        "scale": 1.0
-      },
-      "missing_rh_pct": {
-        "mean": 0.0,
-        "scale": 1.0
-      },
-      "missing_VPmax_mbar": {
-        "mean": 0.0,
-        "scale": 1.0
-      },
-      "missing_VPact_mbar": {
-        "mean": 0.0,
-        "scale": 1.0
-      },
-      "missing_VPdef_mbar": {
-        "mean": 0.0,
-        "scale": 1.0
-      },
-      "missing_sh_gkg": {
-        "mean": 0.0,
-        "scale": 1.0
-      },
-      "missing_H2OC_mmolmol": {
-        "mean": 0.0,
-        "scale": 1.0
-      },
-      "missing_rho_gm3": {
-        "mean": 0.0,
-        "scale": 1.0
-      },
-      "missing_wv_ms": {
-        "mean": 0.0,
-        "scale": 1.0
-      },
-      "missing_max_wv_ms": {
-        "mean": 0.0,
-        "scale": 1.0
-      },
-      "missing_wd_deg": {
-        "mean": 0.0,
-        "scale": 1.0
       }
     }
   }

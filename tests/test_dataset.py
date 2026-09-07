@@ -11,8 +11,11 @@ from src.data.dataset import (
     WeatherDataset,
     WeatherForecastDataset,
     WeatherSample,
+    missing_indicator_diagnostics,
     validate_weather_batch,
+    window_rejection_diagnostics,
 )
+from src.data.preprocessing import FEATURE_COLUMNS as MODEL_FEATURE_COLUMNS
 
 
 def make_batch(batch_size: int = 2) -> WeatherBatch:
@@ -387,6 +390,22 @@ def test_dataloader_batches_have_expected_dimensions() -> None:
     validate_weather_batch(batch, n_features=len(FEATURES))
 
 
+def test_model_feature_batch_has_18_inputs() -> None:
+    n_hours = SAMPLE_SPAN + 40
+    timestamps = pd.date_range("2020-01-01", periods=n_hours, freq="1h")
+    frame = pd.DataFrame({"Date Time": timestamps})
+    for index, column in enumerate(MODEL_FEATURE_COLUMNS):
+        frame[column] = np.arange(n_hours, dtype=np.float32) + index
+    dataset = WeatherForecastDataset(
+        frame, MODEL_FEATURE_COLUMNS, "T (degC)", input_window=WINDOW, horizon=HORIZON
+    )
+    loader = build_dataloaders(dataset, dataset, dataset, batch_size=4)["train"]
+    batch = next(iter(loader))
+    assert batch["x"].shape == (4, 168, 18)
+    assert batch["y"].shape == (4, 72, 1)
+    validate_weather_batch(batch, n_features=18)
+
+
 def test_last_observed_target_matches_final_input_hour() -> None:
     """last_observed_target reads the target value at the last input timestep, not beyond."""
     df = make_hourly_df(SAMPLE_SPAN + 5)
@@ -394,3 +413,25 @@ def test_last_observed_target_matches_final_input_hour() -> None:
 
     expected = float(df[TARGET].iloc[WINDOW - 1])
     assert dataset.last_observed_target(0) == pytest.approx(expected)
+
+
+def test_window_rejection_diagnostic_matches_dataset_length() -> None:
+    df = make_hourly_df(SAMPLE_SPAN + 5)
+    df.loc[1, FEATURES[0]] = np.nan
+    dataset = WeatherForecastDataset(df, FEATURES, TARGET, input_window=WINDOW, horizon=HORIZON)
+    diagnostic = window_rejection_diagnostics(df, FEATURES, TARGET, WINDOW, HORIZON)
+    assert diagnostic["valid_windows"] == len(dataset)
+    rejected = sum(value for key, value in diagnostic.items() if key.startswith("rejected_"))
+    assert diagnostic["valid_windows"] + rejected == diagnostic["candidate_windows"]
+
+
+def test_missing_indicator_diagnostic_counts_rows_and_valid_windows() -> None:
+    df = make_hourly_df(SAMPLE_SPAN + 2)
+    indicator = "missing_demo"
+    df[indicator] = 0.0
+    df.loc[0, indicator] = 1.0
+    features = [*FEATURES, indicator]
+    dataset = WeatherForecastDataset(df, features, TARGET, input_window=WINDOW, horizon=HORIZON)
+    diagnostic = missing_indicator_diagnostics(df, dataset, [indicator])
+    assert diagnostic["processed_rows_with_indicator"] == 1
+    assert diagnostic["valid_windows_with_indicator"] == 1

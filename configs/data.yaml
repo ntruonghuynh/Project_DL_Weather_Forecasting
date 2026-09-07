@@ -64,4 +64,4 @@ split:
 scaling:
   method: "standard_scaler"
   fit_scope: "train_only"         # scaler is fit on train rows only, never val/test
-  binary_feature_scaling_rule: "include_in_standard_scaler"  # missing_* flags are scaled like any other feature, not excluded
+  binary_feature_scaling_rule: "exclude_from_standard_scaler"  # missing_* remain binary audit columns, not model features

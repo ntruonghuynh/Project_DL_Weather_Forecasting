@@ -5,12 +5,17 @@ data/raw/jena_climate_2009_2016.csv - so the whole file runs in well under
 a second and has no dependency on the large raw dataset being present.
 """
 
+import json
+from pathlib import Path
+
+import joblib
 import numpy as np
 import pandas as pd
 import pytest
 from sklearn.preprocessing import StandardScaler
 
 from src.data.preprocessing import (
+    DIAGNOSTIC_INDICATOR_COLUMNS,
     FEATURE_COLUMNS,
     RAW_NUMERIC_COLUMNS,
     TARGET_COLUMN,
@@ -73,6 +78,41 @@ def test_sentinel_values_replaced_with_nan() -> None:
     assert report["total_replaced"] == 2
     assert report["backward_fill"] is False
     assert report["interpolate"] is False
+
+
+def test_sentinel_is_removed_before_hourly_resampling() -> None:
+    timestamps = pd.date_range("2020-01-01", periods=6, freq="10min")
+    raw = make_toy_raw_df(timestamps, **{"wv (m/s)": [1, 1, -9999, 1, 1, 1]})
+    cleaned, _ = handle_sentinels(raw)
+    hourly = resample_hourly(cleaned)
+    assert hourly["wv (m/s)"].iloc[0] == pytest.approx(1.0)
+
+
+def test_canonical_artifacts_match_compatibility_copies() -> None:
+    root = Path(__file__).resolve().parents[1]
+    canonical = root / "artifacts" / "preprocessing"
+    processed = root / "data" / "processed"
+    assert json.loads((canonical / "feature_schema.json").read_text()) == json.loads(
+        (processed / "feature_schema.json").read_text()
+    ) == json.loads((root / "artifacts" / "feature_schema.json").read_text())
+    assert json.loads((canonical / "split_metadata.json").read_text()) == json.loads(
+        (processed / "split_metadata.json").read_text()
+    )
+    canonical_scaler = joblib.load(canonical / "scaler.joblib")
+    compatibility_scaler = joblib.load(processed / "scaler.joblib")
+    np.testing.assert_allclose(canonical_scaler.mean_, compatibility_scaler.mean_)
+    np.testing.assert_allclose(canonical_scaler.scale_, compatibility_scaler.scale_)
+    schema = json.loads((canonical / "feature_schema.json").read_text())
+    assert schema["ordered_features"] == FEATURE_COLUMNS
+    assert len(schema["ordered_features"]) == 18
+    assert not any(column.startswith("missing_") for column in schema["ordered_features"])
+    assert schema["target"]["index"] == TARGET_INDEX == 1
+    assert canonical_scaler.n_features_in_ == 18
+
+    for split in ("train", "val", "test"):
+        frame = pd.read_csv(processed / f"{split}_processed.csv")
+        assert set(DIAGNOSTIC_INDICATOR_COLUMNS).issubset(frame.columns)
+        assert set(np.unique(frame[DIAGNOSTIC_INDICATOR_COLUMNS].to_numpy())) <= {0.0, 1.0}
 
 
 def test_sentinel_handling_does_not_mutate_input_df() -> None:
@@ -359,8 +399,8 @@ def test_inverse_transform_target_matches_sklearn_inverse_transform() -> None:
 def test_inverse_transform_target_default_index_is_target_index() -> None:
     """The default target_index argument matches the module's own TARGET_INDEX constant."""
     scaler = StandardScaler()
-    scaler.mean_ = np.zeros(32)
-    scaler.scale_ = np.ones(32)
+    scaler.mean_ = np.zeros(18)
+    scaler.scale_ = np.ones(18)
     scaler.mean_[TARGET_INDEX] = 5.0
     scaler.scale_[TARGET_INDEX] = 2.0
 
@@ -387,7 +427,7 @@ def test_build_public_feature_schema_matches_pipeline_constants() -> None:
 
 
 def test_build_public_feature_schema_infers_units_from_column_names() -> None:
-    """Raw physical-unit columns keep their unit; engineered/indicator columns are dimensionless."""
+    """Raw physical units are retained and cyclical features are dimensionless."""
     schema = build_public_feature_schema()
     by_name = {f["name"]: f for f in schema["features"]}
 
@@ -395,7 +435,7 @@ def test_build_public_feature_schema_infers_units_from_column_names() -> None:
     assert by_name["T (degC)"]["unit"] == "degC"
     assert by_name["rh (%)"]["unit"] == "%"
     assert by_name["hour_sin"]["unit"] == "dimensionless"
-    assert by_name["missing_T_degC"]["unit"] == "dimensionless"
+    assert not any(name.startswith("missing_") for name in by_name)
 
 
 def test_build_public_feature_schema_window_contract_matches_config() -> None:
@@ -407,5 +447,7 @@ def test_build_public_feature_schema_window_contract_matches_config() -> None:
 
     assert schema["window_contract"]["input_length_hours"] == window_cfg["input_length_hours"]
     assert schema["window_contract"]["horizon_hours"] == window_cfg["horizon_hours"]
-    assert schema["window_contract"]["x_shape"] == f"[{window_cfg['input_length_hours']}, 32]"
+    assert schema["window_contract"]["x_shape"] == (
+        f"[{window_cfg['input_length_hours']}, {len(FEATURE_COLUMNS)}]"
+    )
     assert schema["window_contract"]["y_shape"] == f"[{window_cfg['horizon_hours']}, 1]"

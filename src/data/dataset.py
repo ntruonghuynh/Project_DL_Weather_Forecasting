@@ -331,3 +331,56 @@ class WeatherForecastDataset(Dataset):
             "forecast_start": _to_timestamp(self._timestamps_s[input_end]),
             "forecast_end": _to_timestamp(self._timestamps_s[target_end - 1]),
         }
+
+
+def window_rejection_diagnostics(
+    df: pd.DataFrame,
+    features: list[str],
+    target: str,
+    input_window: int = DEFAULT_INPUT_LENGTH,
+    horizon: int = DEFAULT_HORIZON,
+) -> dict[str, int]:
+    """Report candidate/valid/rejected windows without changing dataset logic."""
+    values = df[features].to_numpy(dtype=np.float32)
+    targets = df[target].to_numpy(dtype=np.float32)
+    candidate_count = max(0, len(df) - input_window - horizon + 1)
+    if candidate_count == 0:
+        return {
+            "candidate_windows": 0,
+            "valid_windows": 0,
+            "rejected_invalid_input": 0,
+            "rejected_missing_target": 0,
+            "rejected_input_and_target": 0,
+        }
+    starts = np.arange(candidate_count)
+    x_bad_rows = ~np.isfinite(values).all(axis=1)
+    y_bad_rows = ~np.isfinite(targets)
+    x_prefix = np.concatenate([[0], np.cumsum(x_bad_rows)])
+    y_prefix = np.concatenate([[0], np.cumsum(y_bad_rows)])
+    x_bad = x_prefix[starts + input_window] - x_prefix[starts] > 0
+    y_bad = y_prefix[starts + input_window + horizon] - y_prefix[starts + input_window] > 0
+    return {
+        "candidate_windows": candidate_count,
+        "valid_windows": int((~x_bad & ~y_bad).sum()),
+        "rejected_invalid_input": int((x_bad & ~y_bad).sum()),
+        "rejected_missing_target": int((~x_bad & y_bad).sum()),
+        "rejected_input_and_target": int((x_bad & y_bad).sum()),
+    }
+
+
+def missing_indicator_diagnostics(
+    df: pd.DataFrame,
+    dataset: WeatherForecastDataset,
+    indicator_columns: list[str] | None = None,
+) -> dict[str, int]:
+    """Count flagged rows and valid windows containing a missing_* indicator."""
+    columns = indicator_columns or [c for c in dataset.features if c.startswith("missing_")]
+    flagged_rows = df[columns].fillna(0).ne(0).any(axis=1).to_numpy()
+    flagged_windows = 0
+    for start in dataset._valid_starts:
+        end = int(start) + dataset.input_window + dataset.horizon
+        flagged_windows += int(flagged_rows[int(start):end].any())
+    return {
+        "processed_rows_with_indicator": int(flagged_rows.sum()),
+        "valid_windows_with_indicator": flagged_windows,
+    }

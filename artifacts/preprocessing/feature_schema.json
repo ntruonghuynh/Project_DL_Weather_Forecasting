@@ -33,23 +33,9 @@
     "hour_sin",
     "hour_cos",
     "dayofyear_sin",
-    "dayofyear_cos",
-    "missing_p_mbar",
-    "missing_T_degC",
-    "missing_Tpot_K",
-    "missing_Tdew_degC",
-    "missing_rh_pct",
-    "missing_VPmax_mbar",
-    "missing_VPact_mbar",
-    "missing_VPdef_mbar",
-    "missing_sh_gkg",
-    "missing_H2OC_mmolmol",
-    "missing_rho_gm3",
-    "missing_wv_ms",
-    "missing_max_wv_ms",
-    "missing_wd_deg"
+    "dayofyear_cos"
   ],
-  "n_features": 32,
+  "n_features": 18,
   "feature_dtypes": "float32",
   "feature_origin": {
     "raw_numeric": [
@@ -106,8 +92,12 @@
       "rho (g/m**3)",
       "wv (m/s)"
     ],
-    "max": ["max. wv (m/s)"],
-    "circular_mean": ["wd (deg)"],
+    "max": [
+      "max. wv (m/s)"
+    ],
+    "circular_mean": [
+      "wd (deg)"
+    ],
     "frequency": "1h"
   },
   "missing_policy": {
@@ -129,5 +119,5 @@
     "input_shape": "[168, n_features]",
     "target_shape": "[72, 1]"
   },
-  "schema_hash": "88007dc6b65b5d3100c744c282aeda1e320e5091ca4e3873b1f9093254ba1a19"
+  "schema_hash": "9ea0ebf884372c8b814fe303467f89ccb8a31e37a08a6073dc7d37d422a71bee"
 }

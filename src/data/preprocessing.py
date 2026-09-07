@@ -83,8 +83,8 @@ assert set(MEAN_FEATURES) | set(MAX_FEATURES) | set(CIRCULAR_FEATURES) == set(RA
 
 TIME_FEATURE_COLUMNS: list[str] = ["hour_sin", "hour_cos", "dayofyear_sin", "dayofyear_cos"]
 
-# Order matches RAW_NUMERIC_COLUMNS so the derived indicator block lines up
-# with the locked feature_schema.json ordered_features tail.
+# Order matches RAW_NUMERIC_COLUMNS so diagnostic columns remain stable in
+# processed CSVs even though they are excluded from model ordered_features.
 INDICATOR_NAME_MAP: dict[str, str] = {
     "p (mbar)": "missing_p_mbar",
     "T (degC)": "missing_T_degC",
@@ -102,9 +102,10 @@ INDICATOR_NAME_MAP: dict[str, str] = {
     "wd (deg)": "missing_wd_deg",
 }
 
-FEATURE_COLUMNS: list[str] = (
-    RAW_NUMERIC_COLUMNS + TIME_FEATURE_COLUMNS + list(INDICATOR_NAME_MAP.values())
-)
+MODEL_FEATURE_COLUMNS: list[str] = RAW_NUMERIC_COLUMNS + TIME_FEATURE_COLUMNS
+DIAGNOSTIC_INDICATOR_COLUMNS: list[str] = list(INDICATOR_NAME_MAP.values())
+# Backward-compatible public name used by dataset/notebooks: model inputs only.
+FEATURE_COLUMNS: list[str] = MODEL_FEATURE_COLUMNS
 TARGET_INDEX = FEATURE_COLUMNS.index(TARGET_COLUMN)
 
 assert _MISSING_CFG["target_missing_rule"] == "never_imputed", (
@@ -494,19 +495,19 @@ def scale_features(
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, StandardScaler]:
     """Fit StandardScaler on TRAIN ONLY, then transform all three splits.
 
-    Fitting on train alone (never on val/test, never on train+val+test
+    Fitting the 18 model features on train alone (never on val/test, never on train+val+test
     combined) keeps validation and test statistically unseen - fitting on
     everything would leak future information into the mean/std used to
     normalize the past. scikit-learn's StandardScaler computes nanmean/
     nanstd and passes NaN through transform() unchanged, so the
-    intentionally-unimputed target keeps its missing values here too.
+    intentionally-unimputed target keeps its missing values here too. Binary
+    missing_* diagnostic columns are not passed to this function.
     """
-    if _SCALING_CFG["binary_feature_scaling_rule"] != "include_in_standard_scaler":
+    if _SCALING_CFG["binary_feature_scaling_rule"] != "exclude_from_standard_scaler":
         raise NotImplementedError(
             "configs/data.yaml scaling.binary_feature_scaling_rule="
             f"{_SCALING_CFG['binary_feature_scaling_rule']!r} is not implemented; "
-            "scale_features always scales every column in feature_columns "
-            "(including missing_* indicators) with the same StandardScaler."
+            "scale_features expects model features only; missing_* indicators remain binary."
         )
 
     scaler = StandardScaler()
@@ -709,7 +710,7 @@ def preprocess(raw_path: Path, output_dir: Path, config: dict[str, Any] | None =
         train_df, val_df, test_df, FEATURE_COLUMNS
     )
 
-    output_columns = [TIMESTAMP_COLUMN] + FEATURE_COLUMNS
+    output_columns = [TIMESTAMP_COLUMN] + FEATURE_COLUMNS + DIAGNOSTIC_INDICATOR_COLUMNS
     _save_csv(train_scaled[output_columns], output_dir / "train_processed.csv")
     _save_csv(val_scaled[output_columns], output_dir / "val_processed.csv")
     _save_csv(test_scaled[output_columns], output_dir / "test_processed.csv")
@@ -732,12 +733,12 @@ def preprocess(raw_path: Path, output_dir: Path, config: dict[str, Any] | None =
     _write_json(artifacts_dir / "split_metadata.json", split_metadata)
     _write_json(output_dir / "split_metadata.json", split_metadata)
 
+    # artifacts/preprocessing is canonical; the other paths are compatibility copies.
+    _write_json(artifacts_dir / "feature_schema.json", schema)
     _write_json(output_dir / "feature_schema.json", schema)
 
-    # Fresh, always-in-sync feature schema for the Model Team - regenerated
-    # every run from live FEATURE_COLUMNS/config, distinct from the
-    # hand-approved LOCKED_SCHEMA_PATH this function validates against above.
-    _write_json(PROJECT_ROOT / "artifacts" / "feature_schema.json", build_public_feature_schema())
+    # Retain the legacy artifacts/ path as an identical compatibility copy.
+    _write_json(PROJECT_ROOT / "artifacts" / "feature_schema.json", schema)
 
     logger.info(
         "Preprocessing complete: train=%d val=%d test=%d rows, %d features -> %s",

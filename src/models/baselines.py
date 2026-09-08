@@ -1,0 +1,117 @@
+from __future__ import annotations
+
+import torch
+
+
+def persistence_forecast(
+    x: torch.Tensor,
+    horizon: int,
+    target_feature_index: int,
+) -> torch.Tensor:
+    """
+    Persistence baseline.
+
+    Dùng giá trị target cuối cùng trong chuỗi input
+    để dự báo cho toàn bộ các bước tương lai.
+
+    Args:
+        x: Tensor đầu vào có shape [B, input_len, n_features].
+        horizon: Số bước cần dự báo.
+        target_feature_index: Vị trí của target trong feature list.
+
+    Returns:
+        Tensor dự báo có shape [B, horizon, 1].
+    """
+
+    if x.ndim != 3:
+        raise ValueError(
+            f"x must have shape [B, input_len, n_features], got {tuple(x.shape)}"
+        )
+
+    if not 0 <= target_feature_index < x.shape[-1]:
+        raise ValueError(
+            f"Invalid target_feature_index={target_feature_index}"
+        )
+
+    last_target = x[:, -1, target_feature_index].reshape(-1, 1, 1)
+
+    forecast = last_target.repeat(1, horizon, 1)
+
+    return forecast
+def seasonal_naive_forecast(
+    x: torch.Tensor,
+    horizon: int,
+    season_length: int,
+    target_feature_index: int,
+) -> torch.Tensor:
+    """
+    Seasonal naive baseline.
+
+    Dự báo tương lai bằng cách lặp lại pattern target
+    của chu kỳ gần nhất.
+
+    Args:
+        x: Input tensor [B, input_len, n_features].
+        horizon: Số bước dự báo.
+        season_length: Độ dài chu kỳ, ví dụ 24 hoặc 168 giờ.
+        target_feature_index: Vị trí target trong feature list.
+
+    Returns:
+        Forecast tensor [B, horizon, 1].
+    """
+
+    if x.ndim != 3:
+        raise ValueError(
+            f"x must have shape [B, input_len, n_features], got {tuple(x.shape)}"
+        )
+
+    if not 0 <= target_feature_index < x.shape[-1]:
+        raise ValueError(
+            f"Invalid target_feature_index={target_feature_index}"
+        )
+
+    if season_length <= 0:
+        raise ValueError("season_length must be positive")
+
+    if x.shape[1] < season_length:
+        raise ValueError(
+            f"input length {x.shape[1]} is smaller than "
+            f"season_length={season_length}"
+        )
+
+    seasonal_pattern = x[
+        :, -season_length:, target_feature_index
+    ]
+
+    repeats = (horizon + season_length - 1) // season_length
+
+    forecast = seasonal_pattern.repeat(1, repeats)
+    forecast = forecast[:, :horizon]
+
+    return forecast.unsqueeze(-1)
+
+
+def seasonal_naive_24h(
+    x: torch.Tensor,
+    horizon: int,
+    target_feature_index: int,
+) -> torch.Tensor:
+    return seasonal_naive_forecast(
+        x=x,
+        horizon=horizon,
+        season_length=24,
+        target_feature_index=target_feature_index,
+    )
+
+
+def seasonal_naive_168h(
+    x: torch.Tensor,
+    horizon: int,
+    target_feature_index: int,
+) -> torch.Tensor:
+    return seasonal_naive_forecast(
+        x=x,
+        horizon=horizon,
+        season_length=168,
+        target_feature_index=target_feature_index,
+    )

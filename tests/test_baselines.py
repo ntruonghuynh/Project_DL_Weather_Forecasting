@@ -6,6 +6,7 @@ from src.models.baselines import (
     seasonal_naive_168h,
 )
 
+
 def test_persistence_output_shape():
     x = torch.randn(4, 168, 18)
 

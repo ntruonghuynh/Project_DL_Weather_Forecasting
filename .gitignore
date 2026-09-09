@@ -220,6 +220,7 @@ __marimo__/
 # Project data and artifacts (keep documentation/placeholders)
 data/raw/*
 !data/raw/.gitkeep
+!data/raw/manifest.json
 data/processed/*
 !data/processed/.gitkeep
 runs/*

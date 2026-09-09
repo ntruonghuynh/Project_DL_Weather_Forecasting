@@ -1,8 +1,7 @@
 """Executable tests for the leakage-safe preprocessing pipeline (src.data.preprocessing).
 
-Every test builds a small, in-memory synthetic DataFrame - never reads
-data/raw/jena_climate_2009_2016.csv - so the whole file runs in well under
-a second and has no dependency on the large raw dataset being present.
+Tests use synthetic data and checked-in canonical artifacts, never the raw
+Jena CSV or ignored processed files. Integration outputs stay in tmp_path.
 """
 
 import json
@@ -14,6 +13,7 @@ import pandas as pd
 import pytest
 from sklearn.preprocessing import StandardScaler
 
+from src.data import preprocessing
 from src.data.preprocessing import (
     DIAGNOSTIC_INDICATOR_COLUMNS,
     FEATURE_COLUMNS,
@@ -88,31 +88,88 @@ def test_sentinel_is_removed_before_hourly_resampling() -> None:
     assert hourly["wv (m/s)"].iloc[0] == pytest.approx(1.0)
 
 
-def test_canonical_artifacts_match_compatibility_copies() -> None:
+def test_checked_in_canonical_artifacts_match_contract() -> None:
+    """Validate only version-controlled artifacts, available in a clean checkout."""
     root = Path(__file__).resolve().parents[1]
     canonical = root / "artifacts" / "preprocessing"
-    processed = root / "data" / "processed"
-    assert json.loads((canonical / "feature_schema.json").read_text()) == json.loads(
-        (processed / "feature_schema.json").read_text()
-    ) == json.loads((root / "artifacts" / "feature_schema.json").read_text())
-    assert json.loads((canonical / "split_metadata.json").read_text()) == json.loads(
-        (processed / "split_metadata.json").read_text()
+    schema = json.loads((canonical / "feature_schema.json").read_text(encoding="utf-8"))
+    assert schema == json.loads(
+        (root / "artifacts" / "feature_schema.json").read_text(encoding="utf-8")
     )
     canonical_scaler = joblib.load(canonical / "scaler.joblib")
-    compatibility_scaler = joblib.load(processed / "scaler.joblib")
-    np.testing.assert_allclose(canonical_scaler.mean_, compatibility_scaler.mean_)
-    np.testing.assert_allclose(canonical_scaler.scale_, compatibility_scaler.scale_)
-    schema = json.loads((canonical / "feature_schema.json").read_text())
     assert schema["ordered_features"] == FEATURE_COLUMNS
     assert len(schema["ordered_features"]) == 18
     assert not any(column.startswith("missing_") for column in schema["ordered_features"])
     assert schema["target"]["index"] == TARGET_INDEX == 1
-    assert canonical_scaler.n_features_in_ == 18
+    assert canonical_scaler.n_features_in_ == len(FEATURE_COLUMNS)
+    metadata = json.loads((canonical / "split_metadata.json").read_text(encoding="utf-8"))
+    assert isinstance(metadata, dict)
+
+
+def test_preprocess_creates_matching_compatibility_copies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Run the real pipeline with synthetic inputs and all outputs isolated in tmp_path."""
+    timestamps = pd.date_range("2020-01-01", periods=100 * 6, freq="10min")
+    wind = np.ones(len(timestamps))
+    wind[12:18] = -9999.0  # One missing hour exercises indicator values of both 0 and 1.
+    raw = make_toy_raw_df(
+        timestamps,
+        **{
+            TARGET_COLUMN: np.linspace(5.0, 25.0, len(timestamps)).tolist(),
+            "wv (m/s)": wind.tolist(),
+        },
+    )
+    raw_path = tmp_path / "toy_raw.csv"
+    raw.to_csv(raw_path, index=False, date_format=preprocessing.TIMESTAMP_FORMAT)
+
+    schema = build_public_feature_schema()
+    # Adapt the public schema to the locked-schema fields required by the real validator.
+    schema["ordered_features"] = [feature["name"] for feature in schema["features"]]
+    schema["target"] = {"name": schema["target_column"], "index": schema["target_index"]}
+    locked_schema_path = tmp_path / "locked_schema.json"
+    locked_schema_path.write_text(json.dumps(schema), encoding="utf-8")
+
+    canonical = tmp_path / "artifacts" / "preprocessing"
+    processed = tmp_path / "data" / "processed"
+    legacy_schema_path = tmp_path / "artifacts" / "feature_schema.json"
+    monkeypatch.setattr(preprocessing, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(preprocessing, "LOCKED_SCHEMA_PATH", locked_schema_path)
+    monkeypatch.chdir(tmp_path)
+
+    assert preprocessing.preprocess(
+        raw_path, processed, config={"artifacts_dir": str(canonical)}
+    ) == processed
+
+    for name in ("feature_schema.json", "split_metadata.json", "scaler.joblib"):
+        assert (canonical / name).is_file()
+        assert (processed / name).is_file()
+    assert legacy_schema_path.is_file()
+
+    canonical_schema = json.loads((canonical / "feature_schema.json").read_text(encoding="utf-8"))
+    assert canonical_schema == schema
+    assert canonical_schema == json.loads(legacy_schema_path.read_text(encoding="utf-8"))
+    for name in ("feature_schema.json", "split_metadata.json"):
+        assert json.loads((canonical / name).read_text(encoding="utf-8")) == json.loads(
+            (processed / name).read_text(encoding="utf-8")
+        )
+
+    canonical_scaler = joblib.load(canonical / "scaler.joblib")
+    compatibility_scaler = joblib.load(processed / "scaler.joblib")
+    np.testing.assert_array_equal(canonical_scaler.mean_, compatibility_scaler.mean_)
+    np.testing.assert_array_equal(canonical_scaler.scale_, compatibility_scaler.scale_)
+    assert canonical_scaler.n_features_in_ == compatibility_scaler.n_features_in_
+    assert canonical_scaler.n_features_in_ == len(FEATURE_COLUMNS)
 
     for split in ("train", "val", "test"):
-        frame = pd.read_csv(processed / f"{split}_processed.csv")
+        csv_path = processed / f"{split}_processed.csv"
+        assert csv_path.is_file()
+        frame = pd.read_csv(csv_path)
+        assert not frame.empty
         assert set(DIAGNOSTIC_INDICATOR_COLUMNS).issubset(frame.columns)
         assert set(np.unique(frame[DIAGNOSTIC_INDICATOR_COLUMNS].to_numpy())) <= {0.0, 1.0}
+        if split == "train":
+            assert set(frame["missing_wv_ms"].unique()) == {0.0, 1.0}
 
 
 def test_sentinel_handling_does_not_mutate_input_df() -> None:

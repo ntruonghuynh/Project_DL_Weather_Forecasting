@@ -1,0 +1,9 @@
+{
+  "dataset_slug": "mnassrib/jena-climate",
+  "files": [
+    {
+      "name": "jena_climate_2009_2016.csv",
+      "sha256": "9626d3964f7afb3fa94b6f3d3a0e92fe96e4a4477c31ed9875cc64d6717c129f"
+    }
+  ]
+}

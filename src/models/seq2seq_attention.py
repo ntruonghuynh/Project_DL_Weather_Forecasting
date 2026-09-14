@@ -1,11 +1,24 @@
-"""Attention Seq2Seq placeholder; model implementation belongs to TV4."""
+"""Attention Seq2Seq model implementation.
 
+Owner: TV4 - Attention LSTM & Interpretability.
+"""
 
-class Seq2SeqAttention:
-    """Unimplemented model conforming to the shared forecast contract."""
+from __future__ import annotations
 
-    def forward(
-        self, x: object, y: object | None = None, teacher_forcing_ratio: float = 0.0
-    ) -> object:
-        """Return a forecast shaped [B,72,1] when implemented."""
-        raise NotImplementedError("TV4 must implement attention Seq2Seq")
+from .attention import BahdanauAttention
+from .attention_lstm_seq2seq import (
+    AttentionLSTMDecoder,
+    AttentionLSTMEncoder,
+    AttentionLSTMSeq2Seq,
+)
+
+# Standard alias conforming to project scaffold and contracts
+Seq2SeqAttention = AttentionLSTMSeq2Seq
+
+__all__ = [
+    "BahdanauAttention",
+    "AttentionLSTMEncoder",
+    "AttentionLSTMDecoder",
+    "AttentionLSTMSeq2Seq",
+    "Seq2SeqAttention",
+]

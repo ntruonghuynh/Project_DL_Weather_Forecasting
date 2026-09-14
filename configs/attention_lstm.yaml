@@ -1,0 +1,38 @@
+# Config for AttentionLSTMSeq2Seq (owner: TV4 - Attention LSTM & Interpretability)
+#
+# ASSUMPTION: no example config file for TV3's plain LSTM was available at
+# the time this was written, so key names/structure below are inferred
+# from src/models/seq2seq_lstm.py's constructor arguments and
+# docs/WORKFLOW.md's `python scripts/train.py --config configs/<model>.yaml`
+# convention. Align field names with configs/seq2seq_lstm.yaml (or
+# whatever the real shared schema is) once available - it is likely that
+# n_features / target_feature_index should come from data schema rather
+# than being duplicated here; keeping them here for now as this model must
+# not hard-code them internally, but something upstream has to supply them.
+
+model:
+  name: attention_lstm_seq2seq
+  hidden_size: 128
+  num_layers: 1
+  dropout: 0.0
+  horizon: 72
+  attention_dim: null  # null -> defaults to hidden_size inside the model
+
+# NOTE: n_features and target_feature_index are expected to be resolved
+# from the data schema/config at training-script level, not hard-coded
+# here, per DATA_RULES.md ("MUST NOT hard-code n_features=18 or
+# target_feature_index=1 in consumer code"). Left here only as an explicit
+# placeholder for whoever wires configs/data.yaml -> model construction.
+data_schema_ref: configs/data.yaml
+
+training:
+  # Same dataset/split/metric/training budget as LSTM & Transformer models,
+  # per the "no separate trainer" constraint in the mission spec.
+  teacher_forcing_ratio: 0.5
+  seed: 42
+
+visualization:
+  # Which decoder steps to export attention heatmaps for (demo/debug only,
+  # not used for model selection).
+  sample_decoder_steps: [0, 17, 35, 53, 71]
+  num_samples: 4

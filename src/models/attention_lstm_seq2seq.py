@@ -38,40 +38,7 @@ from torch import nn
 
 from .attention import BahdanauAttention
 
-try:  # pragma: no cover - exercised only when base.py is present in the repo
-    from .base import validate_forward_arguments, validate_model_output
-except ImportError:  # pragma: no cover - fallback path, see ASSUMPTION above
-
-    def validate_forward_arguments(
-        training: bool,
-        y: torch.Tensor | None,
-        teacher_forcing_ratio: float,
-    ) -> None:
-        if not 0.0 <= teacher_forcing_ratio <= 1.0:
-            raise ValueError("teacher_forcing_ratio must be within [0.0, 1.0]")
-        if not training and (y is not None or teacher_forcing_ratio != 0.0):
-            raise ValueError(
-                "y must be None and teacher_forcing_ratio must be 0.0 "
-                "outside of training (validation/test/inference)"
-            )
-
-    def validate_model_output(
-        output: torch.Tensor,
-        x: torch.Tensor,
-        horizon: int,
-        target_dim: int,
-    ) -> None:
-        expected_shape = (x.shape[0], horizon, target_dim)
-        if output.shape != expected_shape:
-            raise ValueError(
-                f"model output must have shape {list(expected_shape)}, got {list(output.shape)}"
-            )
-        if output.device != x.device:
-            raise ValueError("model output must be on the same device as x")
-        if not output.is_floating_point():
-            raise TypeError("model output must have a floating-point dtype")
-        if torch.isnan(output).any():
-            raise ValueError("model output contains NaN values")
+from .base import validate_forward_arguments, validate_model_output
 
 
 class AttentionLSTMEncoder(nn.Module):

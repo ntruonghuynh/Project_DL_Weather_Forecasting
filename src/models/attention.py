@@ -75,7 +75,8 @@ class BahdanauAttention(nn.Module):
             )
         if encoder_outputs.ndim != 3:
             raise ValueError(
-                f"encoder_outputs must be [B, T_enc, encoder_hidden_size], got {list(encoder_outputs.shape)}"
+                "encoder_outputs must be [B, T_enc, encoder_hidden_size], "
+                f"got {list(encoder_outputs.shape)}"
             )
         if decoder_hidden.shape[0] != encoder_outputs.shape[0]:
             raise ValueError("decoder_hidden and encoder_outputs must share batch size")

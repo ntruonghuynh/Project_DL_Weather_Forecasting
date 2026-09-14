@@ -83,7 +83,9 @@ def plot_attention_heatmap(
 
     weights = np.asarray(attention_weights)
     if weights.ndim != 2:
-        raise ValueError(f"attention_weights must be 2D [horizon, T_enc], got shape {weights.shape}")
+        raise ValueError(
+            f"attention_weights must be 2D [horizon, T_enc], got shape {weights.shape}"
+        )
     if not run_id or not model_id or not data_split:
         raise ValueError(
             "run_id, model_id and data_split are required (VISUALIZATION_RULES.md: "
@@ -100,7 +102,11 @@ def plot_attention_heatmap(
     im = ax.imshow(weights, aspect="auto", origin="lower", cmap="viridis")
     ax.set_xlabel("Encoder time step (hours before forecast start)")
     ax.set_ylabel("Decoder step (forecast hour ahead, 1-72)")
-    fig.colorbar(im, ax=ax, label="Attention weight (softmax over encoder time, unitless, sums to 1 per row)")
+    fig.colorbar(
+        im,
+        ax=ax,
+        label="Attention weight (softmax over encoder time, unitless, sums to 1 per row)",
+    )
 
     sample_part = f" | sample={sample_index}" if sample_index is not None else ""
     title = f"Attention weights — model={model_id} run={run_id} split={data_split}{sample_part}"
@@ -167,13 +173,18 @@ def save_report_figure(
 
     manifest_path = report_dir / "figure_manifest.csv"
     is_new = not manifest_path.exists()
+    rel_path = (
+        figure_path.relative_to(report_dir.parent)
+        if report_dir.parent != Path(".")
+        else figure_path
+    )
     with manifest_path.open("a", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=FIGURE_MANIFEST_COLUMNS)
         if is_new:
             writer.writeheader()
         writer.writerow(
             {
-                "path": str(figure_path.relative_to(report_dir.parent) if report_dir.parent != Path(".") else figure_path),
+                "path": str(rel_path),
                 "run_id": run_id,
                 "model_id": model_id,
                 "split": data_split,

@@ -29,7 +29,6 @@ import torch
 from torch import nn
 
 from .attention import BahdanauAttention
-
 from .base import validate_forward_arguments, validate_model_output
 
 

@@ -9,28 +9,20 @@ Key difference vs. TV3's plain LSTM: TV3's LSTMEncoder only returns the
 final (hidden, cell) - it does not expose per-timestep outputs, so there is
 nothing for an attention mechanism to attend over. This module therefore
 defines its own encoder that also returns the full output sequence
-(`encoder_outputs`, shape [B, 168, hidden_size]). This is a private
+(``encoder_outputs``, shape [B, 168, hidden_size]). This is a private
 architectural detail of this model only; it does NOT change the shared
 data/model contract in docs/WORKFLOW.md, and does not require any change
 to TV3's or TV5's code.
 
-Attention weights are exposed via `get_last_attention_weights()`, a
+Attention weights are exposed via ``get_last_attention_weights()``, a
 separate method, per MODEL_RULES.md ("Attention weights SHOULD go through
 a separate method/interface; MUST NOT change the prediction contract").
-They are NOT returned from `forward()`.
+They are NOT returned from ``forward()``.
 
-ASSUMPTION - base.py:
-    This repo's src/models/base.py (which TV3 imports
-    `validate_forward_arguments` / `validate_model_output` from) was not
-    available at the time this file was written. The validation logic
-    below re-implements what MODEL_RULES.md specifies, and is used only as
-    a fallback if `from .base import ...` fails. If `src/models/base.py`
-    exists in the repo, it is imported and used instead, so behavior
-    automatically matches the real shared implementation once this file is
-    placed in the repo. Whoever reviews this PR (TV1/TV3) should delete
-    the fallback block below once confirmed it matches base.py exactly, or
-    flag any mismatch.
+Validators ``validate_forward_arguments`` and ``validate_model_output``
+are imported from the shared ``src/models/base.py``.
 """
+
 from __future__ import annotations
 
 import torch

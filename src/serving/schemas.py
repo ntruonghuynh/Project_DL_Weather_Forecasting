@@ -1,6 +1,8 @@
-"""Framework-neutral prediction schemas."""
+"""Framework-neutral prediction and model-bundle schemas."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -14,6 +16,8 @@ class PredictionRecord:
     model_version: str
     split: str
     run_id: str
+    horizon: int
+    unit: str = "degC"
 
 
 @dataclass(frozen=True)
@@ -24,3 +28,9 @@ class ModelBundle:
     model_name: str
     model_version: str
     run_id: str
+    scaler: object
+    feature_schema: dict[str, Any]
+    resolved_config: dict[str, Any]
+    metadata: dict[str, Any]
+    bundle_path: Path | None = None
+    checksums: dict[str, str] = field(default_factory=dict)

@@ -1,6 +1,6 @@
 # TV6 Evaluation and Demo Guide
 
-Tài liệu này mô tả luồng TV6 từ prediction artifact thật đến đánh giá, khóa model, đóng gói và demo. Không có bước nào huấn luyện model hoặc tự tạo kết quả thay thế.
+Tài liệu này mô tả luồng từ prediction artifact thật đến đánh giá, khóa model, đóng gói và demo. Không có bước nào huấn luyện model hoặc tự tạo kết quả thay thế.
 
 ## 1. Prediction artifact
 

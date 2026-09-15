@@ -1,5 +1,27 @@
 defaults: base.yaml
+
 model:
   name: transformer
   owner: TV5
-  implementation: pending
+  implementation: src.models.transformer.WeatherTransformer
+  d_model: 128
+  nhead: 8
+  num_encoder_layers: 3
+  num_decoder_layers: 3
+  dim_feedforward: 512
+  dropout: 0.1
+
+# The construction layer must resolve n_features, target_feature_index,
+# input_length and horizon from these locked sources. They are intentionally
+# not duplicated as schema-specific integer literals in this model config.
+data_schema_ref: artifacts/preprocessing/feature_schema.json
+data_config_ref: configs/data.yaml
+
+training:
+  teacher_forcing_ratio: 0.5
+
+profiling:
+  warmup_steps: 5
+  measurement_steps: 20
+  batch_sizes: [1, 8, 16, 32]
+  metrics: [parameter_count, peak_memory_mb, train_latency_ms, inference_latency_ms]

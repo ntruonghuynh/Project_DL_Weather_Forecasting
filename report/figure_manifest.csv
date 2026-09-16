@@ -1,1 +1,1 @@
-figure_id,path,run_id,split,description,created_at
+figure_id,path,run_id,model_id,split,description,finding,impact,decision,created_at

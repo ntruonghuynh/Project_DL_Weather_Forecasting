@@ -20,22 +20,13 @@ src/interpretability/ or scripts/).
 """
 from __future__ import annotations
 
-import csv
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
 
-FIGURE_MANIFEST_COLUMNS = [
-    "path",
-    "run_id",
-    "model_id",
-    "split",
-    "description",
-    "finding",
-    "impact",
-    "decision",
-]
+from src.evaluation.visualization import register_figure
 
 
 def plot_attention_heatmap(
@@ -172,28 +163,24 @@ def save_report_figure(
     fig.savefig(figure_path, dpi=150, bbox_inches="tight")
 
     manifest_path = report_dir / "figure_manifest.csv"
-    is_new = not manifest_path.exists()
     rel_path = (
         figure_path.relative_to(report_dir.parent)
         if report_dir.parent != Path(".")
         else figure_path
     )
-    with manifest_path.open("a", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=FIGURE_MANIFEST_COLUMNS)
-        if is_new:
-            writer.writeheader()
-        writer.writerow(
-            {
-                "path": str(rel_path),
-                "run_id": run_id,
-                "model_id": model_id,
-                "split": data_split,
-                "description": description,
-                "finding": finding,
-                "impact": impact,
-                "decision": decision,
-            }
-        )
+    register_figure(
+        manifest_path,
+        figure_id=Path(filename).stem,
+        path=rel_path,
+        run_id=run_id,
+        model_id=model_id,
+        split=data_split,
+        description=description,
+        finding=finding,
+        impact=impact,
+        decision=decision,
+        created_at=datetime.now(timezone.utc).isoformat(),
+    )
 
     return figure_path
 

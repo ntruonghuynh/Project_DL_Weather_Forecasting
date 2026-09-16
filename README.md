@@ -27,6 +27,8 @@ python -m pytest
 
 Sao chép `.env.example` thành `.env` và điều chỉnh các đường dẫn cục bộ khi phần triển khai được bổ sung.
 
-## Trạng thái
+## Evaluation và demo
 
-Kho mã nguồn hiện mới ở giai đoạn dựng khung. Các phần tiền xử lý, mô hình, huấn luyện, suy luận và thực nghiệm chưa được triển khai; dự án chưa công bố bất kỳ kết quả thực nghiệm nào.
+TV6 cung cấp metric MAE/MSE/RMSE ở °C, phân tích per-horizon/worst cases, validation-only selection, final-test audit, checksummed ModelBundle, Predictor, FastAPI và Streamlit client. Hướng dẫn đầy đủ nằm tại [docs/EVALUATION_DEMO.md](docs/EVALUATION_DEMO.md).
+
+Dự án chưa công bố kết quả thực nghiệm vì chưa có bộ validation/final-test artifact từ các run huấn luyện đã khóa. Không tạo số liệu thay thế khi chưa có checkpoint thật.

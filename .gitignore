@@ -234,3 +234,6 @@ runs/*
 fix/data-review-additions
 .DS_Store
 *.DS_Store
+/bản phân công deep learning.docx
+/artifacts/demo/
+/.tmp/

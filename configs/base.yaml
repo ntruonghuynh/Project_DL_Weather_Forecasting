@@ -5,7 +5,16 @@ data:
   forecast_hours: 72
   target_features: 1
 training:
+  epochs: 10
+  batch_size: 64
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  optimizer: adam
+  loss: mse
+  grad_clip: 1.0
+  patience: 5
   teacher_forcing_ratio: 0.0
+  teacher_forcing_decay: 0.0
 run:
   runs_dir: runs
   parent_run_id: null

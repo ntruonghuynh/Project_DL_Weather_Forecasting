@@ -1,5 +1,21 @@
+# Config for Baseline Seq2Seq LSTM (owner: TV3 - Baselines & Seq2Seq LSTM)
 defaults: base.yaml
+
 model:
   name: seq2seq_lstm
   owner: TV3
-  implementation: pending
+  implementation: src.models.seq2seq_lstm.Seq2SeqLSTM
+  hidden_size: 128
+  num_layers: 1
+  dropout: 0.0
+  horizon: 72
+
+data_schema_ref: artifacts/preprocessing/feature_schema.json
+data_config_ref: configs/data.yaml
+
+training:
+  teacher_forcing_ratio: 0.5
+  teacher_forcing_decay: 0.05
+  learning_rate: 0.001
+  batch_size: 64
+  epochs: 15

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -24,10 +25,10 @@ def api_predict(base_url: str, payload: dict, timeout: float = 60.0) -> dict:
         return json.loads(response.read().decode("utf-8"))
 
 
-def _parse_upload(uploaded_file) -> dict:
-    payload = json.loads(uploaded_file.getvalue().decode("utf-8"))
+def _parse_payload_bytes(raw: bytes) -> dict:
+    payload = json.loads(raw.decode("utf-8"))
     required = {"timestamps", "observations"}
-    optional = {"future_timestamps", "future_actual"}
+    optional = {"future_timestamps", "future_actual", "provenance"}
     if (
         not isinstance(payload, dict)
         or not required.issubset(payload)
@@ -37,6 +38,10 @@ def _parse_upload(uploaded_file) -> dict:
             "JSON requires timestamps and observations; optional future_timestamps/future_actual"
         )
     return payload
+
+
+def _parse_upload(uploaded_file) -> dict:
+    return _parse_payload_bytes(uploaded_file.getvalue())
 
 
 def main() -> None:
@@ -59,21 +64,41 @@ def main() -> None:
     except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as error:
         st.sidebar.error(f"Cannot reach API: {error}")
 
-    uploaded = st.file_uploader(
-        "Upload inference JSON",
-        type=["json"],
-        help="Object with timestamps[168] and observations[168] keyed by feature schema.",
+    configured_dir = os.getenv("JENA_DEMO_PAYLOAD_DIR")
+    configured_samples = (
+        sorted(Path(configured_dir).glob("*.json"))
+        if configured_dir and Path(configured_dir).is_dir()
+        else []
     )
-    if uploaded is None:
-        st.info("Upload a real 168-hour input payload to run the versioned model bundle.")
-        return
+    modes = ["Upload JSON"]
+    if configured_samples:
+        modes.append("Chọn sample thật đã cấu hình")
+    mode = st.radio("Nguồn input", modes, horizontal=True)
     try:
-        payload = _parse_upload(uploaded)
-    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+        if mode == "Chọn sample thật đã cấu hình":
+            selected = st.selectbox("Sample", configured_samples, format_func=lambda p: p.name)
+            payload = _parse_payload_bytes(selected.read_bytes())
+            provenance = payload.get("provenance", {})
+            if provenance.get("synthetic") is not False:
+                raise ValueError("configured sample must declare provenance.synthetic=false")
+        else:
+            uploaded = st.file_uploader(
+                "Upload inference JSON",
+                type=["json"],
+                help="Object with timestamps[168] and observations[168] keyed by feature schema.",
+            )
+            if uploaded is None:
+                st.info("Upload a real 168-hour input payload to run the versioned model bundle.")
+                return
+            payload = _parse_upload(uploaded)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
         st.error(f"Invalid input file: {error}")
         return
 
     history = pd.DataFrame(payload["observations"], index=pd.to_datetime(payload["timestamps"]))
+    if "provenance" in payload:
+        st.caption("Nguồn dữ liệu demo đã được ghi nhận")
+        st.json(payload["provenance"], expanded=False)
     st.subheader("Input history")
     target_candidates = [name for name in history if "degC" in name]
     if target_candidates:

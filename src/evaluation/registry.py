@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import hmac
 import json
+import math
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -67,14 +69,14 @@ def select_validation_candidate(
     """Select the best validation run only when it clears the declared baseline gate."""
     if not candidates:
         raise ValueError("at least one candidate is required")
-    if baseline_rmse_deg_c <= 0:
+    if not math.isfinite(baseline_rmse_deg_c) or baseline_rmse_deg_c <= 0:
         raise ValueError("baseline_rmse_deg_c must be positive")
-    if not 0 <= minimum_improvement < 1:
+    if not math.isfinite(minimum_improvement) or not 0 <= minimum_improvement < 1:
         raise ValueError("minimum_improvement must be within [0,1)")
     for candidate in candidates:
         if candidate.split != "validation":
             raise ValueError("model selection may only consume validation metrics")
-        if candidate.rmse_deg_c < 0:
+        if not math.isfinite(candidate.rmse_deg_c) or candidate.rmse_deg_c < 0:
             raise ValueError("candidate RMSE must be non-negative")
         provenance = (
             candidate.run_id, candidate.model_name, candidate.checkpoint,
@@ -108,6 +110,24 @@ def write_selection_manifest(
         raise FileExistsError(f"selection manifest is immutable and already exists: {path}")
     if candidate.split != "validation":
         raise ValueError("selection manifest must be based on validation")
+    if (
+        not math.isfinite(baseline_rmse_deg_c)
+        or not math.isfinite(candidate.rmse_deg_c)
+        or baseline_rmse_deg_c <= 0
+        or candidate.rmse_deg_c < 0
+    ):
+        raise ValueError("baseline RMSE must be positive and candidate RMSE non-negative")
+    if not math.isfinite(minimum_improvement) or not 0 <= minimum_improvement < 1:
+        raise ValueError("minimum_improvement must be within [0,1)")
+    if not math.isfinite(improvement_fraction):
+        raise ValueError("improvement_fraction must be finite")
+    expected_improvement = (
+        baseline_rmse_deg_c - candidate.rmse_deg_c
+    ) / baseline_rmse_deg_c
+    if not abs(improvement_fraction - expected_improvement) <= 1e-12:
+        raise ValueError("improvement_fraction does not match baseline and candidate RMSE")
+    if improvement_fraction < minimum_improvement:
+        raise ValueError("candidate does not clear the declared baseline gate")
     if not comparison_population_id or not approved_by or any(not name for name in approved_by):
         raise ValueError("comparison_population_id and approved_by are required")
     payload = {
@@ -134,6 +154,13 @@ def authorize_final_test(
 ) -> dict[str, Any]:
     """Refuse test access unless selection is locked and was not tested before."""
     manifest = json.loads(Path(selection_manifest).read_text(encoding="utf-8"))
+    stored_digest = manifest.pop("manifest_sha256", None)
+    canonical = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
+    expected_digest = hashlib.sha256(canonical).hexdigest()
+    if not isinstance(stored_digest, str) or not hmac.compare_digest(
+        stored_digest, expected_digest
+    ):
+        raise ValueError("selection manifest checksum is missing or invalid")
     if manifest.get("locked") is not True or manifest.get("candidate", {}).get("run_id") != run_id:
         raise ValueError("final test is authorized only for the locked candidate run")
     audit_path = Path(audit_path)
@@ -145,7 +172,7 @@ def authorize_final_test(
         "run_id": run_id,
         "selection_manifest": str(selection_manifest),
         "final_test_started_at": _utc_now(),
-        "status": "running",
+        "status": "started",
     }
     audit_path.parent.mkdir(parents=True, exist_ok=True)
     audit_path.write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8")

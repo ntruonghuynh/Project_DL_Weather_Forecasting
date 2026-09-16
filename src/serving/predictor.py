@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
+from numbers import Real
 
 import numpy as np
 
@@ -80,7 +81,15 @@ class Predictor:
                         f"observation {index} feature mismatch: "
                         f"missing={sorted(expected - actual)}, extra={sorted(actual - expected)}"
                     )
-                rows.append([float(item[name]) for name in self.features])
+                ordered: list[float] = []
+                for name in self.features:
+                    value = item[name]
+                    if isinstance(value, bool) or not isinstance(value, Real):
+                        raise TypeError(
+                            f"observation {index} feature {name!r} must be numeric"
+                        )
+                    ordered.append(float(value))
+                rows.append(ordered)
             matrix = np.asarray(rows, dtype=np.float32)
         else:
             raise TypeError("inputs must be a numpy matrix or sequence of feature mappings")
@@ -158,4 +167,6 @@ class Predictor:
             raise ValueError("attention weights do not match [1,horizon,input_length]")
         if not np.isfinite(array).all():
             raise ValueError("attention weights contain non-finite values")
+        if (array < -1e-7).any() or not np.allclose(array.sum(axis=-1), 1.0, atol=1e-5):
+            raise ValueError("attention weights must be non-negative and sum to one")
         return array[0].tolist()

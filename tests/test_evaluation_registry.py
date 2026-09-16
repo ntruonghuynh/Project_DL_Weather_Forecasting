@@ -29,6 +29,10 @@ def test_selection_uses_validation_and_baseline_gate() -> None:
         select_validation_candidate([candidate(split="test")], 2.5)
     with pytest.raises(ValueError, match="below"):
         select_validation_candidate([candidate(rmse=2.49)], 2.5)
+    with pytest.raises(ValueError, match="positive"):
+        select_validation_candidate([candidate()], float("nan"))
+    with pytest.raises(ValueError, match="non-negative"):
+        select_validation_candidate([candidate(rmse=float("nan"))], 2.5)
 
 
 def test_selection_manifest_is_immutable_and_test_is_one_shot(tmp_path) -> None:
@@ -49,6 +53,35 @@ def test_selection_manifest_is_immutable_and_test_is_one_shot(tmp_path) -> None:
     authorize_final_test(manifest, "run-a", audit)
     with pytest.raises(RuntimeError, match="already"):
         authorize_final_test(manifest, "run-a", audit)
+
+
+def test_selection_manifest_recomputes_gate_instead_of_trusting_caller(tmp_path) -> None:
+    with pytest.raises(ValueError, match="does not match"):
+        write_selection_manifest(
+            tmp_path / "forged.json", candidate=candidate(rmse=2.9),
+            baseline_rmse_deg_c=3.0, improvement_fraction=0.5,
+            comparison_population_id="population-v1", approved_by=["TV6"],
+        )
+    with pytest.raises(ValueError, match="does not clear"):
+        write_selection_manifest(
+            tmp_path / "below-gate.json", candidate=candidate(rmse=2.95),
+            baseline_rmse_deg_c=3.0, improvement_fraction=1 / 60,
+            comparison_population_id="population-v1", approved_by=["TV6"],
+        )
+
+
+def test_final_test_rejects_tampered_selection_manifest(tmp_path) -> None:
+    manifest = tmp_path / "selection.json"
+    write_selection_manifest(
+        manifest, candidate=candidate(), baseline_rmse_deg_c=3.0,
+        improvement_fraction=1 / 3, comparison_population_id="population-v1",
+        approved_by=["TV6", "TV1"],
+    )
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["candidate"]["run_id"] = "tampered-run"
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="checksum"):
+        authorize_final_test(manifest, "tampered-run", tmp_path / "audit.json")
 
 
 def test_registry_is_append_only(tmp_path) -> None:

@@ -5,8 +5,11 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-import matplotlib.pyplot as plt
+import matplotlib
 import pandas as pd
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
 
 FIGURE_MANIFEST_COLUMNS = [
     "figure_id", "path", "run_id", "model_id", "split", "description",
@@ -35,7 +38,11 @@ def save_forecast_figure(
     required = {"timestamp", "y_true", "y_pred"}
     if not required.issubset(frame.columns) or frame.empty:
         raise ValueError("predictions must contain non-empty timestamp/y_true/y_pred columns")
-    view = frame.iloc[:max_points]
+    if "sample_index" in frame:
+        first_sample = frame["sample_index"].iloc[0]
+        view = frame.loc[frame["sample_index"] == first_sample].iloc[:max_points]
+    else:
+        view = frame.iloc[:max_points]
     fig, ax = plt.subplots(figsize=(12, 5))
     ax.plot(view["timestamp"], view["y_true"], label="Actual", linewidth=1.5)
     ax.plot(view["timestamp"], view["y_pred"], label="Prediction", linewidth=1.2)

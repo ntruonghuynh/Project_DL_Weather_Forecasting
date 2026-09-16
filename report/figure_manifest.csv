@@ -1,2 +1,1 @@
 figure_id,path,run_id,model_id,split,description,finding,impact,decision,created_at
-fig1_evaluation_pipeline_architecture,report/figures/fig1_evaluation_pipeline_architecture.jpg,canonical,system,all,"Evaluation pipeline architecture from prediction artifacts to deployable model","Full traceability from predictions to production bundle","Ensures zero test leakage and strict inverse scaling","Adopted as canonical evaluation framework",2026-09-16T00:30:00Z

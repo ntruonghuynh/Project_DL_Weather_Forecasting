@@ -29,6 +29,6 @@ Sao chép `.env.example` thành `.env` và điều chỉnh các đường dẫn 
 
 ## Evaluation và demo
 
-TV6 cung cấp metric MAE/MSE/RMSE ở °C, phân tích per-horizon/worst cases, validation-only selection, final-test audit, checksummed ModelBundle, Predictor, FastAPI và Streamlit client. Hướng dẫn đầy đủ nằm tại [docs/TV6_EVALUATION_DEMO.md](docs/TV6_EVALUATION_DEMO.md).
+TV6 cung cấp metric MAE/MSE/RMSE ở °C, phân tích per-horizon/worst cases, validation-only selection, final-test audit, checksummed ModelBundle, Predictor, FastAPI và Streamlit client. Hướng dẫn đầy đủ nằm tại [docs/EVALUATION_DEMO.md](docs/EVALUATION_DEMO.md).
 
 Dự án chưa công bố kết quả thực nghiệm vì chưa có bộ validation/final-test artifact từ các run huấn luyện đã khóa. Không tạo số liệu thay thế khi chưa có checkpoint thật.

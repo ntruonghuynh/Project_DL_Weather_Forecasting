@@ -31,6 +31,18 @@ def build_error_frame(
         timestamps = np.asarray(target_timestamps)
         if timestamps.shape != true.shape:
             raise ValueError("target_timestamps must align with [N,H] forecasts")
+        flattened = timestamps.reshape(-1)
+        if np.issubdtype(timestamps.dtype, np.number):
+            if not np.isfinite(flattened).all():
+                raise ValueError("target_timestamps must contain finite epoch seconds")
+            parsed = pd.to_datetime(flattened, unit="s", utc=True, errors="raise")
+        else:
+            parsed = pd.to_datetime(flattened, utc=True, errors="raise")
+        timestamps = np.asarray(parsed, dtype=object).reshape(n_samples, horizon)
+        for row in timestamps:
+            cadence = pd.Series(row).diff().dropna().dt.total_seconds().to_numpy()
+            if not np.all(cadence == 3600):
+                raise ValueError("target_timestamps must use one-hour cadence within each sample")
 
     frame = pd.DataFrame(
         {
@@ -75,7 +87,7 @@ def analyze_errors(predictions: object, top_n: int = 20) -> dict[str, Any]:
 
     worst = frame.nlargest(min(top_n, len(frame)), "absolute_error").reset_index(drop=True)
     summaries: dict[str, Any] = {"worst_cases": worst}
-    parsed = pd.to_datetime(frame["timestamp"], errors="coerce")
+    parsed = pd.to_datetime(frame["timestamp"], errors="coerce", utc=True)
     if parsed.notna().all():
         enriched = frame.assign(hour=parsed.dt.hour, month=parsed.dt.month)
         seasons = {

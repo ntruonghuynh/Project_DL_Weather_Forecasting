@@ -8,7 +8,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from src.serving.bundle import build_bundle, verify_bundle
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.serving.bundle import build_bundle, load_bundle, verify_bundle  # noqa: E402
 
 
 def parse_arguments(arguments: list[str] | None = None) -> argparse.Namespace:
@@ -57,8 +61,8 @@ def parse_arguments(arguments: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--model-kwargs",
         type=str,
-        default=None,
-        help="Optional JSON string of keyword arguments passed to model constructor.",
+        required=True,
+        help="JSON object of constructor arguments from the locked run config/schema.",
     )
     return parser.parse_args(arguments)
 
@@ -81,7 +85,7 @@ def export_bundle_from_run(
     model_name: str,
     model_version: str,
     run_id: str,
-    model_kwargs: dict[str, Any] | None = None,
+    model_kwargs: dict[str, Any],
 ) -> Path:
     """Collect artifacts from a run directory and export a verified ModelBundle."""
     run_dir = Path(run_dir)
@@ -92,10 +96,6 @@ def export_bundle_from_run(
     feature_schema = _find_file(run_dir, ["feature_schema.json"])
     resolved_config = _find_file(run_dir, ["resolved_config.json", "config.json"])
     metadata = _find_file(run_dir, ["metadata.json", "run_metadata.json"])
-
-    if model_kwargs is None:
-        config_data = json.loads(resolved_config.read_text(encoding="utf-8"))
-        model_kwargs = config_data.get("model", {}).get("kwargs", {})
 
     print(f"Building ModelBundle for '{model_name}' (v{model_version}) from {run_dir}...")
     destination = build_bundle(
@@ -113,6 +113,7 @@ def export_bundle_from_run(
     )
 
     manifest = verify_bundle(destination)
+    load_bundle(destination)
     print(f"Bundle successfully created and verified at: {destination}")
     print(f"Files included: {list(manifest['files'].values())}")
     return destination
@@ -120,8 +121,10 @@ def export_bundle_from_run(
 
 def main(arguments: list[str] | None = None) -> None:
     args = parse_arguments(arguments)
-    kwargs = json.loads(args.model_kwargs) if args.model_kwargs else None
     try:
+        kwargs = json.loads(args.model_kwargs)
+        if not isinstance(kwargs, dict):
+            raise ValueError("--model-kwargs must decode to a JSON object")
         export_bundle_from_run(
             args.run_dir,
             args.output_dir,

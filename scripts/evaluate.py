@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,10 +12,18 @@ from pathlib import Path
 import joblib
 import numpy as np
 
-from src.evaluation.error_analysis import analyze_errors, build_error_frame
-from src.evaluation.metrics import evaluate_forecasts, inverse_scale_target, persistence_predictions
-from src.evaluation.registry import authorize_final_test
-from src.evaluation.visualization import (
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.evaluation.error_analysis import analyze_errors, build_error_frame  # noqa: E402
+from src.evaluation.metrics import (  # noqa: E402
+    evaluate_forecasts,
+    inverse_scale_target,
+    persistence_predictions,
+)
+from src.evaluation.registry import authorize_final_test  # noqa: E402
+from src.evaluation.visualization import (  # noqa: E402
     register_figure,
     save_forecast_figure,
     save_residual_figure,

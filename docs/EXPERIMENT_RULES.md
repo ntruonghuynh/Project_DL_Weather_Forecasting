@@ -32,4 +32,4 @@
 
 ## Lệnh chuẩn
 
-Xem [TV6 Evaluation and Demo Guide](TV6_EVALUATION_DEMO.md) để chạy evaluation, comparison, bundle và demo.
+Xem [TV6 Evaluation and Demo Guide](EVALUATION_DEMO.md) để chạy evaluation, comparison, bundle và demo.

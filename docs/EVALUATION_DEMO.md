@@ -49,12 +49,24 @@ Audit được tạo trước khi đọc kết quả và chặn lần chạy tes
 ## 5. Model bundle
 
 ```bash
-python scripts/build_bundle.py --destination <bundle-dir> --checkpoint <best.pt> --scaler <scaler.joblib> --feature-schema <feature_schema.json> --resolved-config <resolved_config.json> --metadata <run_metadata.json> --model-class src.models.seq2seq_lstm.Seq2SeqLSTM --model-kwargs "{\"n_features\":18,\"target_feature_index\":1,\"horizon\":72}" --model-name seq2seq_lstm --model-version <version> --run-id <run-id>
+python scripts/export_bundle.py --run-dir <immutable-run-dir> --output-dir <bundle-dir> --model-class <fully-qualified-model-class> --model-kwargs '<constructor-kwargs-from-locked-config-and-schema>' --model-name <model-name> --model-version <version> --run-id <run-id>
 ```
 
-Bundle chứa checkpoint, scaler, schema, config, metadata và checksum của từng file. Loader từ chối file thiếu, bị sửa hoặc không cùng run.
+`--model-kwargs` là JSON object lấy từ resolved config và feature schema của chính run; không nhập số đoán hoặc ghi cứng theo ví dụ. Bundle chứa checkpoint, scaler, schema, config, metadata và checksum của từng file. Exporter tải thử model với strict state-dict trước khi báo thành công; loader từ chối file thiếu, bị sửa hoặc không cùng run.
 
-## 6. API và Streamlit
+## 6. Payload demo từ dữ liệu thật
+
+Không commit sample tổng hợp. Xuất một cửa sổ thật từ train hoặc validation bằng đúng pipeline hourly trước bước scaling:
+
+```bash
+python scripts/generate_demo_payload.py --raw-csv data/raw/jena_climate_2009_2016.csv --schema artifacts/preprocessing/feature_schema.json --split validation --output <local-demo-payload.json>
+```
+
+Payload có SHA-256 của source/schema và `synthetic=false`. Script cố ý không cho phép lấy sample từ test split. File đầu ra là artifact cục bộ, không commit vào repository.
+
+Đặt `JENA_DEMO_PAYLOAD_DIR` tới thư mục chứa các payload thật để giao diện hiển thị danh sách chọn sample; nếu không đặt, người dùng vẫn có thể upload JSON trực tiếp. Sample được cấu hình phải có `provenance.synthetic=false`.
+
+## 7. API và Streamlit
 
 ```bash
 make stack BUNDLE=<bundle-dir>
@@ -69,6 +81,10 @@ python -m streamlit run app/streamlit_app.py
 ```
 
 Payload JSON cho demo có `timestamps` và `observations` đúng 168 giờ. Có thể thêm `future_actual` để hiển thị đối chiếu; trường này không được gửi vào model. API trả 72 dự báo °C, persistence baseline, provenance, latency và attention weights nếu model hỗ trợ.
+
+## 8. Trạng thái bàn giao
+
+Code, contract tests và runbook đã hoàn tất. Các con số thực nghiệm, model được chọn, final-test report và bundle production chỉ được tạo khi nhóm huấn luyện bàn giao prediction/checkpoint/config/schema/scaler thật cùng provenance hợp lệ. Trạng thái “chưa có kết quả thật” không phải là kết quả thất bại và không được thay bằng số liệu minh họa.
 
 ## Acceptance checklist
 

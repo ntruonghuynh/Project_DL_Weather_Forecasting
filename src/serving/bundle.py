@@ -96,6 +96,10 @@ def verify_bundle(bundle_path: Path) -> dict[str, Any]:
     files, checksums = manifest.get("files"), manifest.get("sha256")
     if not isinstance(files, dict) or not isinstance(checksums, dict):
         raise ValueError("bundle manifest files/sha256 sections are invalid")
+    if files != BUNDLE_FILES:
+        raise ValueError("bundle manifest file mapping does not match schema 1.0")
+    if not isinstance(manifest.get("model_kwargs"), dict):
+        raise ValueError("bundle manifest model_kwargs must be an object")
     for key in BUNDLE_FILES:
         filename = files.get(key)
         if not filename or Path(filename).name != filename:
@@ -144,7 +148,7 @@ def load_bundle(
         else _resolve_model_class(manifest["model_class"])(**manifest["model_kwargs"])
     )
     checkpoint = torch.load(
-        bundle_path / files["checkpoint"], map_location=device, weights_only=False
+        bundle_path / files["checkpoint"], map_location=device, weights_only=True
     )
     state = checkpoint
     if isinstance(checkpoint, dict):

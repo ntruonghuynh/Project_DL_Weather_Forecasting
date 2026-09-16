@@ -14,6 +14,7 @@ import torch
 from torch import nn
 
 from api.main import PredictRequest, create_app
+from app.streamlit_app import _parse_payload_bytes
 from src.serving.bundle import build_bundle, load_bundle, sha256_file, verify_bundle
 from src.serving.predictor import Predictor
 from src.serving.schemas import ModelBundle
@@ -344,6 +345,17 @@ def test_predictor_rejects_mismatched_features(sample_predictor: Predictor) -> N
         sample_predictor.predict(bad_observations, timestamps)
 
 
+def test_predictor_rejects_non_numeric_feature_values(sample_predictor: Predictor) -> None:
+    start_time = datetime(2026, 1, 1, 0, 0)
+    timestamps = [(start_time + timedelta(hours=i)).isoformat() for i in range(12)]
+    observations = [
+        {name: 12.0 for name in sample_predictor.features} for _ in range(12)
+    ]
+    observations[3][sample_predictor.features[0]] = "12.0"  # type: ignore[assignment]
+    with pytest.raises(TypeError, match="must be numeric"):
+        sample_predictor.predict(observations, timestamps)
+
+
 # ============================================================================
 # 3. FastAPI Endpoint Tests
 # ============================================================================
@@ -356,6 +368,18 @@ def test_api_health_not_ready() -> None:
     ][0]
     response = health_endpoint()
     assert response["status"] == "not_ready"
+
+
+def test_streamlit_payload_parser_accepts_provenance_and_rejects_extra_fields() -> None:
+    payload = {
+        "timestamps": ["2026-01-01T00:00:00"],
+        "observations": [{"feature": 1.0}],
+        "provenance": {"synthetic": False},
+    }
+    assert _parse_payload_bytes(json.dumps(payload).encode()) == payload
+    payload["unexpected"] = True
+    with pytest.raises(ValueError, match="requires timestamps"):
+        _parse_payload_bytes(json.dumps(payload).encode())
 
 
 def test_api_ready_flow(sample_predictor: Predictor) -> None:

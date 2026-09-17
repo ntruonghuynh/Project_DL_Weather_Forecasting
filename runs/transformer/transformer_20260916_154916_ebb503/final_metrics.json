@@ -1,0 +1,7 @@
+{
+  "final_train_loss": 1.1826180815696716,
+  "final_val_loss": 1.215113639831543,
+  "final_val_mae": 0.8753261864185333,
+  "best_val_loss": 1.215113639831543,
+  "epochs_completed": 1
+}

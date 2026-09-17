@@ -1,0 +1,2 @@
+epoch,train_loss,val_loss,val_mae,learning_rate,teacher_forcing_ratio
+1,0.9727593660354614,0.9712404012680054,0.7944777309894562,0.001,0.5

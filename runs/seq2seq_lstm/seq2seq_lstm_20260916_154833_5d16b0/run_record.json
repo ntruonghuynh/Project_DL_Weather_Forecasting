@@ -1,0 +1,53 @@
+{
+  "run_id": "seq2seq_lstm_20260916_154833_5d16b0",
+  "status": "completed",
+  "parent_run_id": null,
+  "resolved_config": {
+    "project": "jena_weather_forecasting",
+    "seed": 42,
+    "data": {
+      "input_hours": 168,
+      "forecast_hours": 72,
+      "target_features": 1
+    },
+    "training": {
+      "epochs": 1,
+      "batch_size": 64,
+      "learning_rate": 0.001,
+      "weight_decay": 0.0001,
+      "optimizer": "adam",
+      "loss": "mse",
+      "grad_clip": 1.0,
+      "patience": 5,
+      "teacher_forcing_ratio": 0.5,
+      "teacher_forcing_decay": 0.05
+    },
+    "run": {
+      "runs_dir": "runs",
+      "parent_run_id": null
+    },
+    "model": {
+      "name": "seq2seq_lstm",
+      "owner": "TV3",
+      "implementation": "src.models.seq2seq_lstm.Seq2SeqLSTM",
+      "hidden_size": 128,
+      "num_layers": 1,
+      "dropout": 0.0,
+      "horizon": 72
+    },
+    "data_schema_ref": "artifacts/preprocessing/feature_schema.json",
+    "data_config_ref": "configs/data.yaml"
+  },
+  "seed": 42,
+  "metrics": {
+    "final_train_loss": 1.1830655336380005,
+    "final_val_loss": 1.1813334822654724,
+    "final_val_mae": 0.8623226284980774,
+    "best_val_loss": 1.1813334822654724,
+    "epochs_completed": 1
+  },
+  "best_checkpoint": "runs\\seq2seq_lstm\\seq2seq_lstm_20260916_154833_5d16b0\\best_checkpoint.pt",
+  "last_checkpoint": "runs\\seq2seq_lstm\\seq2seq_lstm_20260916_154833_5d16b0\\last_checkpoint.pt",
+  "predictions": null,
+  "run_dir": "runs\\seq2seq_lstm\\seq2seq_lstm_20260916_154833_5d16b0"
+}

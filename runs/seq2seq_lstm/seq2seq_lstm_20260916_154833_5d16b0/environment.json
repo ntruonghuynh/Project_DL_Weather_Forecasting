@@ -1,0 +1,10 @@
+{
+  "python_version": "3.12.14 (main, Aug 25 2026, 14:01:42) [MSC v.1944 64 bit (AMD64)]",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "torch_version": "2.14.0+cpu",
+  "cuda_available": false,
+  "device_count": 0,
+  "device_name": "cpu",
+  "git_commit": "d3a52f7efdb3ad7a6fe182c625e2609c4d3032d6",
+  "timestamp_utc": "2026-09-16T15:48:34.000132+00:00"
+}

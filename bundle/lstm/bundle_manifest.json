@@ -1,0 +1,30 @@
+{
+  "bundle_schema_version": "1.0",
+  "created_at": "2026-09-17T07:20:22.633596+00:00",
+  "run_id": "seq2seq_lstm_20260917_055727_50fe09",
+  "model_name": "seq2seq_lstm",
+  "model_version": "1.0.0",
+  "model_class": "src.models.seq2seq_lstm.Seq2SeqLSTM",
+  "model_kwargs": {
+    "n_features": 18,
+    "target_feature_index": 1,
+    "hidden_size": 128,
+    "num_layers": 1,
+    "dropout": 0.0,
+    "horizon": 72
+  },
+  "files": {
+    "checkpoint": "model.pt",
+    "scaler": "scaler.joblib",
+    "feature_schema": "feature_schema.json",
+    "resolved_config": "resolved_config.json",
+    "metadata": "metadata.json"
+  },
+  "sha256": {
+    "model.pt": "477721cebd889e90eaa889db6340cf32007a59ff2c2789d92f774c547523154f",
+    "scaler.joblib": "53fcc23145092f67eed93b7ebfceca0223b133a72255990419de9874beaa466a",
+    "feature_schema.json": "d8703e000ceda3aa9a722e099fa2502b686561ccb427e5e48dbbf28017273e6a",
+    "resolved_config.json": "41b3745c8bd794df4aebecae1318894026a816ee30baa6f0342e1895b32b3957",
+    "metadata.json": "f6a6142c353f26905c61e31732e69499befc66709239ebd813c8496fc3267d92"
+  }
+}

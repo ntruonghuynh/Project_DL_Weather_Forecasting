@@ -21,6 +21,31 @@ from src.evaluation.registry import (  # noqa: E402
 )
 
 
+def _save_comparison_figure(frame: pd.DataFrame, output_path: Path) -> None:
+    """Grouped MAE/RMSE bar chart, one bar pair per model, sorted by RMSE."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    positions = np.arange(len(frame))
+    width = 0.35
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.bar(positions - width / 2, frame["mae_deg_c"], width, label="MAE (°C)")
+    ax.bar(positions + width / 2, frame["rmse_deg_c"], width, label="RMSE (°C)")
+    ax.set_xticks(positions)
+    ax.set_xticklabels(frame["model_name"], rotation=10, ha="right")
+    ax.set_ylabel("Error (°C)")
+    ax.set_title("Model comparison — MAE and RMSE (validation)")
+    ax.legend()
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=160, bbox_inches="tight")
+    plt.close(fig)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("metrics", nargs="+", type=Path)
@@ -29,6 +54,7 @@ def main() -> None:
     parser.add_argument("--population-id", required=True)
     parser.add_argument("--selection-manifest", type=Path)
     parser.add_argument("--approved-by", action="append", default=[])
+    parser.add_argument("--figure-output", type=Path)
     args = parser.parse_args()
 
     candidates: list[CandidateMetric] = []
@@ -90,6 +116,8 @@ def main() -> None:
     frame = pd.DataFrame(rows).sort_values("rmse_deg_c")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     frame.to_csv(args.output, index=False)
+    if args.figure_output is not None:
+        _save_comparison_figure(frame, args.figure_output)
     if args.selection_manifest is not None:
         if not args.approved_by:
             raise ValueError("--approved-by is required when locking a selection manifest")

@@ -1,0 +1,11 @@
+{
+  "run_id": "seq2seq_lstm_20260917_055727_50fe09",
+  "model_name": "seq2seq_lstm",
+  "model_version": "1.0.0",
+  "split": "validation",
+  "population_id": "jena_validation_9ea0ebf884372c8b",
+  "checkpoint": "runs\\seq2seq_lstm\\seq2seq_lstm_20260917_055727_50fe09\\best_checkpoint.pt",
+  "resolved_config": "runs\\seq2seq_lstm\\seq2seq_lstm_20260917_055727_50fe09\\resolved_config.yaml",
+  "schema_hash": "9ea0ebf884372c8b814fe303467f89ccb8a31e37a08a6073dc7d37d422a71bee",
+  "scaler_sha256": "53fcc23145092f67eed93b7ebfceca0223b133a72255990419de9874beaa466a"
+}

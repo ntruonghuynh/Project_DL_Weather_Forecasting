@@ -155,6 +155,12 @@ def parse_args() -> argparse.Namespace:
         default="data/processed",
         help="Directory containing train.csv and val.csv",
     )
+    parser.add_argument(
+        "--stride",
+        type=int,
+        default=None,
+        help="Subsampling stride for dataset windows (default from config or 1)",
+    )
     return parser.parse_args()
 
 

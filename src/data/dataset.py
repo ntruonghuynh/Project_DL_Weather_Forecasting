@@ -205,7 +205,11 @@ class WeatherForecastDataset(Dataset):
         target: str,
         input_window: int = DEFAULT_INPUT_LENGTH,
         horizon: int = DEFAULT_HORIZON,
+        stride: int = 1,
     ) -> None:
+        if stride <= 0:
+            raise ValueError("stride must be a positive integer")
+        self.stride = stride
         if target not in features:
             raise ValueError(f"target={target!r} must be included in features")
         if input_window <= 0 or horizon <= 0:
@@ -284,7 +288,10 @@ class WeatherForecastDataset(Dataset):
         x_bad_counts = prefix_x[starts + self.input_window] - prefix_x[starts]
         y_bad_counts = prefix_y[starts + window_len] - prefix_y[starts + self.input_window]
         valid_mask = (x_bad_counts == 0) & (y_bad_counts == 0)
-        return starts[valid_mask]
+        valid_starts = starts[valid_mask]
+        if self.stride > 1:
+            valid_starts = valid_starts[:: self.stride]
+        return valid_starts
 
     def __len__(self) -> int:
         return len(self._valid_starts)

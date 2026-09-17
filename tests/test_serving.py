@@ -9,15 +9,17 @@ from typing import Any
 
 import joblib
 import numpy as np
+import pandas as pd
 import pytest
 import torch
+from fastapi import HTTPException
 from torch import nn
 
 from api.main import PredictRequest, create_app
 from app.streamlit_app import _parse_payload_bytes
 from src.serving.bundle import build_bundle, load_bundle, sha256_file, verify_bundle
 from src.serving.predictor import Predictor
-from src.serving.schemas import ModelBundle
+from src.serving.schemas import ModelBundle, SchemaBoundArray
 
 
 class DummyServingModel(nn.Module):
@@ -149,7 +151,7 @@ def test_build_and_verify_bundle(tmp_path: Path) -> None:
     manifest = verify_bundle(bundle_dest)
     assert manifest["run_id"] == "run_test_001"
     assert manifest["model_name"] == "dummy_model"
-    assert len(manifest["sha256"]) == 5
+    assert len(manifest["sha256"]) == 8
 
 
 def test_verify_bundle_detects_tampered_artifact(tmp_path: Path) -> None:
@@ -172,7 +174,7 @@ def test_verify_bundle_detects_tampered_artifact(tmp_path: Path) -> None:
     )
 
     # Tamper with resolved_config.json
-    config_file = bundle_dest / "resolved_config.json"
+    config_file = bundle_dest / "resolved_config.yaml"
     config_file.write_text('{"tampered": true}', encoding="utf-8")
 
     with pytest.raises(ValueError, match="checksum mismatch"):
@@ -307,15 +309,93 @@ def test_predictor_predict_with_numpy_matrix(sample_predictor: Predictor) -> Non
     timestamps = [(start_time + timedelta(hours=i)).isoformat() for i in range(12)]
     matrix = np.full((12, 4), 15.0, dtype=np.float32)
 
-    records = sample_predictor.predict(matrix, timestamps)
-    assert len(records) == 6
+    with pytest.raises(TypeError, match="bare ndarray"):
+        sample_predictor.predict(matrix, timestamps)
+
+    predictions = sample_predictor.predict_batch(
+        SchemaBoundArray(
+            values=np.stack([matrix, matrix]),
+            feature_order=tuple(sample_predictor.features),
+            schema_hash=sample_predictor.schema_hash,
+        )
+    )
+    assert predictions.shape == (2, 6, 1)
+
+    single_prediction = sample_predictor.predict_batch(
+        SchemaBoundArray(
+            values=matrix,
+            feature_order=tuple(sample_predictor.features),
+            schema_hash=sample_predictor.schema_hash,
+        )
+    )
+    assert single_prediction.shape == (1, 6, 1)
+
+    with pytest.raises(ValueError, match="schema_hash"):
+        sample_predictor.predict_batch(
+            SchemaBoundArray(
+                values=matrix,
+                feature_order=tuple(sample_predictor.features),
+                schema_hash="wrong-schema",
+            )
+        )
+
+
+def test_predictor_schema_bound_array_rejects_wrong_order_and_shape(
+    sample_predictor: Predictor,
+) -> None:
+    matrix = np.full((12, 4), 15.0, dtype=np.float32)
+    with pytest.raises(ValueError, match="feature_order"):
+        sample_predictor.predict_batch(
+            SchemaBoundArray(
+                values=matrix,
+                feature_order=tuple(reversed(sample_predictor.features)),
+                schema_hash=sample_predictor.schema_hash,
+            )
+        )
+    for bad_matrix in (
+        np.zeros((11, 4), dtype=np.float32),
+        np.zeros((12, 3), dtype=np.float32),
+    ):
+        with pytest.raises(ValueError, match="array must have shape"):
+            sample_predictor.predict_batch(
+                SchemaBoundArray(
+                    values=bad_matrix,
+                    feature_order=tuple(sample_predictor.features),
+                    schema_hash=sample_predictor.schema_hash,
+                )
+            )
+    for invalid in (np.nan, np.inf):
+        bad_matrix = matrix.copy()
+        bad_matrix[0, 0] = invalid
+        with pytest.raises(ValueError, match="finite"):
+            sample_predictor.predict_batch(
+                SchemaBoundArray(
+                    values=bad_matrix,
+                    feature_order=tuple(sample_predictor.features),
+                    schema_hash=sample_predictor.schema_hash,
+                )
+            )
+
+
+def test_predictor_dataframe_requires_exact_feature_order(
+    sample_predictor: Predictor,
+) -> None:
+    start_time = datetime(2026, 1, 1, 0, 0)
+    timestamps = [(start_time + timedelta(hours=i)).isoformat() for i in range(12)]
+    frame = pd.DataFrame(
+        np.full((12, 4), 15.0), columns=sample_predictor.features
+    )
+    assert len(sample_predictor.predict(frame, timestamps)) == 6
+    with pytest.raises(ValueError, match="exactly match schema feature order"):
+        sample_predictor.predict(frame[list(reversed(frame.columns))], timestamps)
 
 
 def test_predictor_persistence_baseline(sample_predictor: Predictor) -> None:
-    matrix = np.zeros((12, 4), dtype=np.float32)
-    # target index is 1
-    matrix[-1, 1] = 23.5
-    baseline = sample_predictor.persistence_baseline(matrix)
+    observations = [
+        {name: 0.0 for name in sample_predictor.features} for _ in range(12)
+    ]
+    observations[-1][sample_predictor.features[1]] = 23.5
+    baseline = sample_predictor.persistence_baseline(observations)
     assert len(baseline) == 6
     assert baseline == [23.5] * 6
 
@@ -344,6 +424,25 @@ def test_predictor_rejects_mismatched_features(sample_predictor: Predictor) -> N
     with pytest.raises(ValueError, match="feature mismatch"):
         sample_predictor.predict(bad_observations, timestamps)
 
+    extra_observations = [
+        {**{name: 1.0 for name in sample_predictor.features}, "extra": 2.0}
+        for _ in range(12)
+    ]
+    with pytest.raises(ValueError, match="feature mismatch"):
+        sample_predictor.predict(extra_observations, timestamps)
+
+    wrong_order = [
+        {name: 1.0 for name in reversed(sample_predictor.features)} for _ in range(12)
+    ]
+    with pytest.raises(ValueError, match="feature order"):
+        sample_predictor.predict(wrong_order, timestamps)
+
+    too_short = [
+        {name: 1.0 for name in sample_predictor.features} for _ in range(11)
+    ]
+    with pytest.raises(ValueError, match="expected 12 observations"):
+        sample_predictor.predict(too_short, timestamps)
+
 
 def test_predictor_rejects_non_numeric_feature_values(sample_predictor: Predictor) -> None:
     start_time = datetime(2026, 1, 1, 0, 0)
@@ -354,6 +453,13 @@ def test_predictor_rejects_non_numeric_feature_values(sample_predictor: Predicto
     observations[3][sample_predictor.features[0]] = "12.0"  # type: ignore[assignment]
     with pytest.raises(TypeError, match="must be numeric"):
         sample_predictor.predict(observations, timestamps)
+
+    for invalid in (np.nan, np.inf):
+        invalid_observations = [row.copy() for row in observations]
+        invalid_observations[3][sample_predictor.features[0]] = invalid
+        invalid_observations[3][sample_predictor.features[1]] = 12.0
+        with pytest.raises(ValueError, match="finite"):
+            sample_predictor.predict(invalid_observations, timestamps)
 
 
 # ============================================================================
@@ -406,3 +512,41 @@ def test_api_ready_flow(sample_predictor: Predictor) -> None:
     assert len(predict_resp.predictions) == 6
     assert predict_resp.latency_ms >= 0
     assert len(predict_resp.persistence_baseline) == 6
+
+
+def test_api_http_contract_and_invalid_requests(sample_predictor: Predictor) -> None:
+    application: Any = create_app(predictor=sample_predictor)
+    routes = {r.path: r.endpoint for r in application.routes if hasattr(r, "path")}
+    start_time = datetime(2026, 1, 1, 0, 0)
+    timestamps = [(start_time + timedelta(hours=i)).isoformat() for i in range(12)]
+    observations = [
+        {name: 12.0 for name in sample_predictor.features} for _ in range(12)
+    ]
+    assert routes["/health"]() == {"status": "ready"}
+    assert routes["/model-info"]()["schema_version"] == "unknown"
+    response = routes["/predict"](
+        PredictRequest(timestamps=timestamps, observations=observations)
+    )
+    assert len(response.predictions) == 6
+    assert all(np.isfinite(item.y_pred) for item in response.predictions)
+    assert all(item.unit == "degC" for item in response.predictions)
+
+    invalid_payloads = []
+    missing = [row.copy() for row in observations]
+    missing[0].pop(sample_predictor.features[0])
+    invalid_payloads.append({"timestamps": timestamps, "observations": missing})
+    invalid_payloads.append(
+        {"timestamps": timestamps[:-1], "observations": observations[:-1]}
+    )
+    wrong_order = [
+        {name: 12.0 for name in reversed(sample_predictor.features)}
+        for _ in range(12)
+    ]
+    invalid_payloads.append({"timestamps": timestamps, "observations": wrong_order})
+    not_finite = [row.copy() for row in observations]
+    not_finite[0][sample_predictor.features[0]] = float("nan")
+    invalid_payloads.append({"timestamps": timestamps, "observations": not_finite})
+    for payload in invalid_payloads:
+        with pytest.raises(HTTPException) as error:
+            routes["/predict"](PredictRequest(**payload))
+        assert error.value.status_code == 422

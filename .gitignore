@@ -237,3 +237,5 @@ fix/data-review-additions
 /bản phân công deep learning.docx
 /artifacts/demo/
 /.tmp/
+artifacts/evaluation/**/predictions.csv.gz
+artifacts/predictions/

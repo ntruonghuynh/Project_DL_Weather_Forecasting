@@ -27,8 +27,41 @@ python -m pytest
 
 Sao chép `.env.example` thành `.env` và điều chỉnh các đường dẫn cục bộ khi phần triển khai được bổ sung.
 
-## Evaluation và demo
+## Kết quả đã khóa
 
-TV6 cung cấp metric MAE/MSE/RMSE ở °C, phân tích per-horizon/worst cases, validation-only selection, final-test audit, checksummed ModelBundle, Predictor, FastAPI và Streamlit client. Hướng dẫn đầy đủ nằm tại [docs/EVALUATION_DEMO.md](docs/EVALUATION_DEMO.md).
+Ba model được huấn luyện trên Jena thật với input 168 giờ, horizon 72 giờ và
+`train data_stride=6`. Validation dùng stride 1 trên cùng 10.026 cửa sổ. Đây
+không phải full-overlapping-window training.
 
-Dự án chưa công bố kết quả thực nghiệm vì chưa có bộ validation/final-test artifact từ các run huấn luyện đã khóa. Không tạo số liệu thay thế khi chưa có checkpoint thật.
+Candidate được chọn chỉ bằng validation RMSE là Attention LSTM, run
+`seq2seq_attention_20260917_100234_95dc80`:
+
+| Split | MAE | MSE | RMSE |
+|---|---:|---:|---:|
+| Validation | 2.620241 °C | 11.487950 °C² | 3.389388 °C |
+| Final test | 2.721700 °C | 12.300567 °C² | 3.507216 °C |
+
+Persistence baseline trên validation có RMSE 5.243047 °C. Selection được khóa
+tại `experiments/selection_manifest.json`; final-test provenance nằm tại
+`experiments/final_test_audit.json`.
+
+The current candidate was selected exclusively using validation results. The
+test split had been accessed during an earlier invalid development iteration
+and therefore is not considered a pristine unseen holdout. Those earlier test
+results were not used to select or modify the final candidate.
+
+## Production demo
+
+Production bundle ở `bundle/seq2seq_attention/` là release artifact đi kèm,
+không phải checkpoint được commit vào Git. Xác minh và chạy stack mà không
+retrain:
+
+```bash
+python -c "from pathlib import Path; from src.serving.bundle import verify_bundle; verify_bundle(Path('bundle/seq2seq_attention')); print('PASS')"
+python scripts/run_stack.py --bundle bundle/seq2seq_attention
+```
+
+Kiến trúc runtime là `Streamlit -> FastAPI -> Predictor -> ModelBundle`.
+Streamlit không tải model, checkpoint hoặc scaler và không có local inference
+fallback. Hướng dẫn evaluation, bundle, payload validation thật và E2E nằm tại
+[docs/EVALUATION_DEMO.md](docs/EVALUATION_DEMO.md).

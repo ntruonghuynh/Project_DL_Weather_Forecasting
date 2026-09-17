@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0",
+  "manifest_sha256": "aa6a5576c0bd4425e56b06c01337ba3e1895ac854b5f8739ec670b08c42ad196",
+  "selected_run_id": "seq2seq_attention_20260917_100234_95dc80",
+  "approval": "team_lead_review",
+  "approved_at": "2026-09-17T14:32:52.723523+00:00",
+  "approval_sha256": "690aed4c54f2b70b15febffd9cb8894ded4cf853b18464bae2deb0b66f960cb6"
+}

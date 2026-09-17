@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "manifest_sha256": "aa6a5576c0bd4425e56b06c01337ba3e1895ac854b5f8739ec670b08c42ad196",
+  "selected_run_id": "seq2seq_attention_20260917_100234_95dc80",
+  "checkpoint_sha256": "b133db2b110f3b8b86e02bcb3ebd5cd731c42cdf0c6ca140d8c35c9dad51eb99",
+  "config_sha256": "1c81811afcf657a6c215fbfa889539c40d9dc017cb77ce57c481b1bea41a084f",
+  "schema_sha256": "6cb02534808965d89fc409c2ad903a00174011b0ca7d154c79537f180b99ca30",
+  "schema_hash": "9ea0ebf884372c8b814fe303467f89ccb8a31e37a08a6073dc7d37d422a71bee",
+  "scaler_sha256": "53fcc23145092f67eed93b7ebfceca0223b133a72255990419de9874beaa466a",
+  "test_holdout_status": "previously_exposed_during_development",
+  "selection_used_test_metrics": false,
+  "candidate_selected_from": "validation",
+  "limitation": "Current final candidate was selected exclusively on validation. The existing test split had been accessed in an earlier invalid development iteration and therefore is not treated as a pristine unseen holdout.",
+  "started_at": "2026-09-17T14:33:58.182892+00:00",
+  "completed_at": "2026-09-17T14:34:45.614129+00:00",
+  "status": "completed",
+  "test_population_id": "jena_test_6bb0c8b0faa9231c_in168_out72",
+  "metrics_path": "artifacts/evaluation/seq2seq_attention/seq2seq_attention_20260917_100234_95dc80/test/metrics.json",
+  "prediction_path": "artifacts/predictions/seq2seq_attention/seq2seq_attention_20260917_100234_95dc80/test/predictions.npz",
+  "metrics_sha256": "0b3bd487567ca14c75ec7d1a659b577bccfcb57030332d1d0e6bf78336ff50d8",
+  "prediction_sha256": "21663cb88aa42b3546d6849d109c162b5499f048ce4e991a291a0c7931df8f83",
+  "audit_sha256": "00568708fef638727cfebb3acac1befa2aa6b99e68833eb1e53f2f28984fdefe"
+}

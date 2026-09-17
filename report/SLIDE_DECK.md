@@ -503,22 +503,20 @@ Các thành phần này hỗ trợ audit và tái lập. Không nên dùng cụm
 
 Tại lần kiểm tra ngày 17/09/2026:
 
-- **369 tests passed**.
+- **374 tests passed**.
 - **24 tests skipped** vì các cấu hình phần cứng CUDA/MPS không khả dụng trong môi trường kiểm tra.
-- **14 warnings**, gồm cảnh báo phiên bản scikit-learn của scaler artifact và cảnh báo nested tensor của Transformer.
+- **13 warnings** từ cấu hình nested tensor của Transformer; không có test failure.
 
 Đây là bằng chứng về contract và behavior của code, không phải bằng chứng về độ chính xác dự báo trên dữ liệu thật.
 
-### 6. Trạng thái smoke run và blocker tích hợp
+### 6. Trạng thái real training
 
-Ba run cục bộ hiện có chỉ chạy 1 epoch trên synthetic smoke batches. Các run này xác nhận training loop, checkpoint và metadata hoạt động nhưng không được dùng làm benchmark mô hình.
-
-Trước khi chạy full experiment, cần thống nhất tên file giữa hai component:
-
-- Preprocessing tạo `train_processed.csv` và `val_processed.csv`.
-- Training CLI hiện tìm `train.csv` và `val.csv`.
-
-Nhóm cần sửa mapping này hoặc truyền đúng đường dẫn/tên file trước khi tuyên bố full training hoàn tất.
+Ba real runs đã hoàn tất trên `train_processed.csv`, `smoke=false`. Cả ba dùng
+`training.data_stride=6`; validation dùng stride 1 trên toàn bộ 10.026 cửa sổ.
+Input là 168 giờ và horizon là 72 giờ. Đây không phải
+full-overlapping-window training. Transformer dùng cấu hình compute-feasible
+`d_model=64`, 2 encoder/decoder layers và teacher forcing 1.0 khi training;
+validation/inference dùng teacher forcing 0.0.
 
 ### Gợi ý trực quan
 
@@ -531,7 +529,7 @@ Nhóm cần sửa mapping này hoặc truyền đúng đường dẫn/tên file 
 ## SLIDE 8: GIAO THỨC ĐÁNH GIÁ VÀ TRẠNG THÁI THỰC NGHIỆM
 
 **Người trình bày gợi ý:** TV6  
-**Thông điệp chính:** Evaluation pipeline đã được triển khai, nhưng repository chưa có prediction artifact thật để công bố bảng xếp hạng hoặc chọn model thắng cuộc.
+**Thông điệp chính:** Fair comparison trên validation thật đã chọn Attention LSTM; test không được dùng để chọn hoặc sửa candidate.
 
 ### 1. Input của evaluation
 
@@ -597,28 +595,26 @@ Sau khi chọn, hệ thống tạo `selection_manifest.json` bất biến với 
 
 Test chỉ được mở cho đúng candidate trong selection manifest. `final_test_audit.json` được tạo trước khi đọc prediction test và chặn lần chạy thứ hai. Kết quả test chỉ dùng báo cáo cuối, không quay lại thay model hoặc hyperparameter.
 
-### 7. Trạng thái hiện tại
+### 7. Kết quả thật
 
-| Hạng mục | Trạng thái |
-|---|---|
-| Metric, inverse scaling và persistence baseline | Đã triển khai và có unit test |
-| Per-horizon và error analysis | Đã triển khai |
-| Fair-comparison gate | Đã triển khai |
-| Selection manifest và final-test audit | Đã triển khai |
-| Prediction artifact từ full validation run | Chưa có |
-| Bảng so sánh ba model ở °C | Chưa có |
-| Model được promotion | Chưa xác định |
-| Final-test result | Chưa chạy |
-| Figure thực nghiệm có manifest | Chưa có |
+| Model | MAE °C | MSE °C² | RMSE °C | Improvement vs persistence |
+|---|---:|---:|---:|---:|
+| Attention LSTM | 2.620241 | 11.487950 | 3.389388 | 35.3546% |
+| Seq2Seq LSTM | 2.617508 | 11.530652 | 3.395681 | 35.2346% |
+| Transformer | 3.593824 | 22.563722 | 4.750129 | 9.4014% |
+
+Persistence validation RMSE là 5.243047 °C. Attention LSTM run
+`seq2seq_attention_20260917_100234_95dc80` được promotion vì validation RMSE
+thấp nhất trong các candidate vượt gate 3%. Final test của đúng locked candidate:
+MAE 2.721700 °C, MSE 12.300567 °C² và RMSE 3.507216 °C.
 
 ### 8. Quy tắc cho slide kết quả
 
-Không sử dụng benchmark hard-code, đường metric sinh ngẫu nhiên, cold-front mô phỏng hoặc attention heatmap giả lập làm kết quả dự án. Khi full runs hoàn tất, Slide 8 cần được cập nhật bằng output trực tiếp từ evaluation pipeline và ghi rõ run ID, split, sample count cùng đơn vị.
+Không sử dụng benchmark hard-code, đường metric sinh ngẫu nhiên, cold-front mô phỏng hoặc attention heatmap giả lập làm kết quả dự án. Figure và bảng trên slide phải lấy từ artifact trong `report/figure_manifest.csv`.
 
 ### Gợi ý trực quan
 
-- Ở phiên bản hiện tại, dùng sơ đồ evaluation pipeline và bảng trạng thái.
-- Khi có artifact thật, thay bảng trạng thái bằng bảng validation comparison và tối đa hai figure có provenance.
+- Dùng `experiments/validation_comparison.png` và tối đa hai figure Attention LSTM có provenance trong manifest.
 
 ---
 
@@ -627,14 +623,17 @@ Không sử dụng benchmark hard-code, đường metric sinh ngẫu nhiên, col
 **Người trình bày gợi ý:** TV6  
 **Thông điệp chính:** Serving sử dụng đúng checkpoint, scaler, schema và config của một run đã khóa, không fit lại preprocessing và không huấn luyện trong API.
 
-### 1. ModelBundle v1.0
+### 1. ModelBundle v2.0
 
 Bundle gồm:
 
 - `model.pt`: state dictionary của model.
 - `scaler.joblib`: train-fitted StandardScaler.
 - `feature_schema.json`: feature order, target index và window contract.
-- `resolved_config.json`: cấu hình đã dùng để tạo model.
+- `resolved_config.yaml`: cấu hình đã dùng để tạo model.
+- `preprocessing_config.yaml`: cấu hình preprocessing đã khóa.
+- `selection_manifest.json`: selection validation-only đã khóa.
+- `final_test_audit.json`: provenance của lần final test được cấp quyền.
 - `metadata.json`: run metadata.
 - `bundle_manifest.json`: model identity, constructor kwargs, file mapping và SHA-256 của từng artifact.
 
@@ -667,7 +666,11 @@ Nhận JSON gồm timestamps và observations. Response chứa 72 prediction rec
 
 ### 4. Phạm vi kiểm chứng
 
-API, Predictor và bundle được kiểm tra bằng test bundle/fixture. Hiện chưa có production bundle từ model được promotion vì evaluation chính thức chưa hoàn tất. Vì vậy báo cáo không công bố latency trung bình hoặc throughput hệ thống.
+Production bundle 1.0.0 của locked candidate đã được kiểm tra checksum, strict
+load, direct-model parity, API requests, corrupted-bundle rejection và restart
+determinism. Actual Streamlit flow dùng payload validation thật đã hiển thị 72
+forecast values và attention heatmap. Latency trong một request demo không được
+tuyên bố là benchmark throughput.
 
 ### 5. Lệnh chạy stack
 
@@ -760,7 +763,7 @@ Kết quả dự báo nhiệt độ 72 giờ có thể là một đầu vào cho
 ## SLIDE 11: KẾT LUẬN, GIỚI HẠN HIỆN TẠI VÀ HƯỚNG PHÁT TRIỂN
 
 **Người trình bày gợi ý:** TV1 hoặc đại diện nhóm  
-**Thông điệp chính:** Dự án đã hoàn thiện phần contract và hạ tầng kỹ thuật chính, trong khi kết luận về model tốt nhất vẫn cần full training cùng evaluation artifact thật.
+**Thông điệp chính:** Dự án đã có real training/evaluation, locked candidate, production bundle và E2E demo; kết quả test giữ nguyên caveat về holdout đã từng bị mở trong giai đoạn phát triển.
 
 ### 1. Những phần đã hoàn thành
 
@@ -769,27 +772,26 @@ Kết quả dự báo nhiệt độ 72 giờ có thể là một đầu vào cho
 - Training engine tách training khỏi autoregressive validation và lưu checkpoint/metadata.
 - Evaluation pipeline hỗ trợ metric °C, persistence baseline, per-horizon analysis, model-selection gate và one-shot final-test audit.
 - Serving stack gồm ModelBundle, Predictor, FastAPI và Streamlit HTTP client.
-- Bộ test hiện tại ghi nhận 369 passed, 24 skipped và 14 warnings trong môi trường kiểm tra ngày 17/09/2026.
+- Locked candidate là Attention LSTM; production bundle và E2E stack đã được xác minh bằng payload validation thật.
 
-### 2. Những kết luận chưa được phép đưa ra
+### 2. Giới hạn bắt buộc công bố
 
-- Chưa có bảng validation comparison chính thức giữa ba model.
-- Chưa xác định model tốt nhất.
-- Chưa có evidence rằng các model vượt persistence baseline.
-- Chưa có final-test MAE/RMSE.
-- Chưa có attention heatmap từ checkpoint và sample thật để diễn giải.
-- Chưa có latency benchmark trên production bundle.
+The current candidate was selected exclusively using validation results. The
+test split had been accessed during an earlier invalid development iteration
+and therefore is not considered a pristine unseen holdout. Those earlier test
+results were not used to select or modify the final candidate.
 
-### 3. Công việc cần hoàn tất trước báo cáo kết quả cuối
+Không diễn giải một request latency như throughput benchmark, không gọi
+Transformer là winner, và không gọi training stride 6 là full-overlapping-window
+training.
 
-1. Sửa mapping tên file giữa preprocessing và training CLI.
-2. Chạy full training cho ba model với cùng protocol.
-3. Xuất validation predictions trên cùng population.
-4. Chạy evaluation và so sánh với persistence baseline.
-5. Khóa selection manifest trước khi mở test.
-6. Đánh giá final test đúng một lần.
-7. Cập nhật Slide 8 bằng số liệu và figure có provenance.
-8. Build bundle của candidate đã promotion và chạy live demo.
+### 3. Artifact authoritative
+
+- `experiments/validation_comparison.csv`
+- `experiments/selection_manifest.json`
+- `experiments/final_test_audit.json`
+- `bundle/seq2seq_attention/bundle_manifest.json`
+- `report/figure_manifest.csv`
 
 ### 4. Hướng phát triển
 

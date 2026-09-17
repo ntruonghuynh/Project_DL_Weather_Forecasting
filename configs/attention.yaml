@@ -9,7 +9,8 @@ model:
   horizon: 72
   attention_dim: null  # null -> defaults to hidden_size inside the model
 
-data_schema_ref: configs/data.yaml
+data_schema_ref: artifacts/preprocessing/feature_schema.json
+data_config_ref: configs/data.yaml
 
 training:
   # Same dataset/split/metric/training budget as LSTM & Transformer models

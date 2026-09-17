@@ -13,7 +13,7 @@ from torch import nn
 class TrainingCallback(Protocol):
     """Receive immutable run-aware training lifecycle events."""
 
-    def on_epoch_end(self, epoch: int, metrics: dict[str, float]) -> None: ...
+    def on_epoch_end(self, epoch: int, metrics: dict[str, float | int]) -> None: ...
 
 
 class EarlyStoppingCallback:
@@ -40,7 +40,7 @@ class EarlyStoppingCallback:
         self.wait = 0
         self.should_stop = False
 
-    def on_epoch_end(self, epoch: int, metrics: dict[str, float]) -> None:
+    def on_epoch_end(self, epoch: int, metrics: dict[str, float | int]) -> None:
         if self.monitor not in metrics:
             return
 
@@ -85,31 +85,37 @@ class ModelCheckpointCallback:
 
         self._model_ref: nn.Module | None = None
         self._optimizer_ref: torch.optim.Optimizer | None = None
+        self._scheduler_ref: torch.optim.lr_scheduler.LRScheduler | None = None
         self._extra_metadata: dict[str, Any] = {}
 
     def attach(
         self,
         model: nn.Module,
         optimizer: torch.optim.Optimizer | None = None,
+        scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
         extra_metadata: dict[str, Any] | None = None,
     ) -> None:
         """Attach references to model, optimizer and metadata for checkpointing."""
         self._model_ref = model
         self._optimizer_ref = optimizer
+        self._scheduler_ref = scheduler
         self._extra_metadata = dict(extra_metadata or {})
 
-    def on_epoch_end(self, epoch: int, metrics: dict[str, float]) -> None:
+    def on_epoch_end(self, epoch: int, metrics: dict[str, float | int]) -> None:
         if self._model_ref is None:
             return
 
         checkpoint_data: dict[str, Any] = {
             "epoch": epoch,
+            "global_step": int(metrics.get("global_step", 0)),
             "metrics": metrics,
             "model_state_dict": self._model_ref.state_dict(),
             "metadata": self._extra_metadata,
         }
         if self._optimizer_ref is not None:
             checkpoint_data["optimizer_state_dict"] = self._optimizer_ref.state_dict()
+        if self._scheduler_ref is not None:
+            checkpoint_data["scheduler_state_dict"] = self._scheduler_ref.state_dict()
 
         # Save last checkpoint
         if self.save_last:
@@ -144,7 +150,7 @@ class MetricLoggerCallback:
         self.filepath = self.log_dir / filename
         self._headers_written = False
 
-    def on_epoch_end(self, epoch: int, metrics: dict[str, float]) -> None:
+    def on_epoch_end(self, epoch: int, metrics: dict[str, float | int]) -> None:
         row_data = {"epoch": epoch, **metrics}
         fieldnames = list(row_data.keys())
 

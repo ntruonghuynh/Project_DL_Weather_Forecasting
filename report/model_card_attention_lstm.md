@@ -65,10 +65,22 @@ a like-for-like comparison, per the "same training budget" constraint.
   normalization (`sum ≈ 1`, no NaN), mask correctness, one-batch overfit,
   checkpoint save/load roundtrip.
 - `python -m compileall` passes with zero errors on all source files.
-- **Not yet run**: training/validation on the real Jena dataset (blocked
-  on the shared trainer / `scripts/train.py` integration), and the
-  official evaluation metric. Per EXPERIMENT_RULES.md, no test-set numbers
-  exist yet and none will be produced until this candidate is promoted.
+- Real run: `seq2seq_attention_20260917_100234_95dc80`, `smoke=false`, 8 epochs,
+  best epoch 3 and global step 1024.
+- Training uses real `train_processed.csv` with `data_stride=6`; validation uses
+  stride 1 over all 10,026 valid windows. Input is 168 hours and horizon is 72
+  hours. This is not full-overlapping-window training.
+- Validation: MAE 2.620241 °C, MSE 11.487950 °C², RMSE 3.389388 °C. Persistence
+  RMSE is 5.243047 °C. The validation gate selected this run by the lowest RMSE
+  among passing candidates.
+- Final test: MAE 2.721700 °C, MSE 12.300567 °C², RMSE 3.507216 °C.
+- Production bundle: `bundle/seq2seq_attention/`, version 1.0.0, bundle manifest
+  SHA-256 `3fa89932b9d60fd596a9e8329fb694078b7daadca1b51854f76c88572efc5460`.
+
+The current candidate was selected exclusively using validation results. The
+test split had been accessed during an earlier invalid development iteration
+and therefore is not considered a pristine unseen holdout. Those earlier test
+results were not used to select or modify the final candidate.
 
 ## Reminder
 Heatmaps from `src/viz/attention_heatmap.py` are an explanation/debug tool

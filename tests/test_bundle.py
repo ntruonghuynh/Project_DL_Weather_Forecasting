@@ -69,5 +69,5 @@ def test_bundle_rejects_manifest_file_remapping(tmp_path) -> None:
     manifest = json.loads(manifest_path.read_text())
     manifest["files"]["checkpoint"] = "metadata.json"
     manifest_path.write_text(json.dumps(manifest))
-    with pytest.raises(ValueError, match="file mapping"):
+    with pytest.raises(ValueError, match="manifest checksum|file mapping"):
         verify_bundle(destination)

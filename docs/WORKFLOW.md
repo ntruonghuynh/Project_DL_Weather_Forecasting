@@ -34,7 +34,22 @@ TV1 chịu trách nhiệm chốt interface và validator. TV2 triển khai dữ 
 
 ## Lệnh huấn luyện
 
-Giao diện dự kiến: `python scripts/train.py --config configs/<model>.yaml`. Lệnh này chưa hoạt động cho đến khi thành viên phụ trách huấn luyện triển khai.
+Ba lệnh real training đã được sử dụng:
+
+```bash
+.venv/bin/python scripts/train.py --config configs/lstm.yaml --device cpu --data-dir data/processed --runs-dir runs
+.venv/bin/python scripts/train.py --config configs/attention.yaml --device cpu --data-dir data/processed --runs-dir runs
+.venv/bin/python scripts/train.py --config configs/transformer.yaml --device cpu --data-dir data/processed --runs-dir runs
+```
+
+### Training compute policy của ba real runs ngày 2026-09-17
+
+- Input là 168 giờ và horizon là 72 giờ theo contract đã khóa.
+- Cả ba model đọc `train_processed.csv` thật với `training.data_stride=6`. Đây là huấn luyện trên mỗi cửa sổ chồng lấp thứ sáu trải dọc tập train; **không phải full-overlapping-window training**.
+- Validation đọc `val_processed.csv` thật với stride 1, dùng toàn bộ 10.026 cửa sổ hợp lệ và cùng population cho cả ba model.
+- Transformer dùng cấu hình compute-feasible cho CPU: `d_model=64`, 2 encoder layers, 2 decoder layers, 4 heads, feed-forward 256 và teacher forcing 1.0 khi training. Validation/prediction của Transformer vẫn autoregressive với teacher forcing 0.0.
+- Split chronological, scaler train-only, feature schema, input length và horizon không được thay đổi để cải thiện metric.
+- Provenance cụ thể của từng run nằm trong `resolved_config.yaml`, `environment.json` và `run_record.json`; model selection chỉ dùng validation artifacts trong experiment registry.
 
 ## Bàn giao sản phẩm
 

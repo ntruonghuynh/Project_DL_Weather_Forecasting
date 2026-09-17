@@ -67,7 +67,13 @@ def test_evaluate_cli_writes_traceable_validation_outputs(tmp_path: Path) -> Non
     assert metrics["overall"] == {"mae": 1.0, "mse": 1.0, "rmse": 1.0}
     assert metrics["baseline"] == {"mae": 0.0, "mse": 0.0, "rmse": 0.0}
     assert metrics["unit"] == "degC"
+    assert metrics["metric_units"] == {
+        "mae": "degC",
+        "mse": "degC^2",
+        "rmse": "degC",
+    }
     assert len((output / "metrics_per_horizon.csv").read_text().splitlines()) == 73
+    assert (output / "predictions.csv.gz").is_file()
     assert len((output / "figure_manifest.csv").read_text().splitlines()) == 3
     assert (output / "forecast.png").is_file()
     assert (output / "residuals.png").is_file()

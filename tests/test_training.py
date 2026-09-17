@@ -20,6 +20,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
+from src.config import get_processed_split_path
 from src.models.base import validate_forward_arguments
 from src.training.callbacks import (
     EarlyStoppingCallback,
@@ -36,6 +37,17 @@ from src.utils.seed import set_seed
 # ---------------------------------------------------------------------------
 # 1. Reproducibility & Utilities Tests
 # ---------------------------------------------------------------------------
+
+
+def test_canonical_processed_split_paths(tmp_path: Path) -> None:
+    """Training and prediction consumers resolve preprocessing's exact outputs."""
+    assert get_processed_split_path(tmp_path, "train").name == "train_processed.csv"
+    assert get_processed_split_path(tmp_path, "validation").name == "val_processed.csv"
+    assert get_processed_split_path(tmp_path, "val").name == "val_processed.csv"
+    assert get_processed_split_path(tmp_path, "test").name == "test_processed.csv"
+
+    with pytest.raises(ValueError, match="Unknown processed split"):
+        get_processed_split_path(tmp_path, "holdout")
 
 
 def test_set_seed_reproducibility() -> None:
@@ -112,6 +124,9 @@ def test_run_manager_lifecycle(tmp_path: Path) -> None:
     record = create_run(config=cfg, seed=42, runs_dir=tmp_path)
 
     assert record.status == "created"
+    assert record.smoke is False
+    assert record.start_time
+    assert record.end_time is None
     assert record.run_dir.is_dir()
     assert (record.run_dir / "resolved_config.yaml").is_file()
     assert (record.run_dir / "environment.json").is_file()
@@ -125,6 +140,9 @@ def test_run_manager_lifecycle(tmp_path: Path) -> None:
     )
     assert updated.status == "completed"
     assert updated.metrics["best_val_loss"] == 0.45
+    assert updated.end_time is not None
+    assert updated.duration_seconds is not None
+    assert updated.duration_seconds >= 0.0
     assert (record.run_dir / "final_metrics.json").is_file()
 
 
@@ -280,6 +298,8 @@ def test_trainer_validation_never_receives_target() -> None:
     )
 
     assert metrics["epochs_completed"] == 2
+    assert metrics["best_epoch"] in {1, 2}
+    assert metrics["global_step"] == len(train_loader) * 2
     assert len(spy_model.train_calls) > 0
     assert len(spy_model.val_calls) > 0
 
@@ -368,3 +388,23 @@ def test_train_cli_smoke_execution(tmp_path: Path) -> None:
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     assert result.returncode == 0, f"train.py failed with output:\n{result.stderr}\n{result.stdout}"
     assert "completed successfully" in result.stdout or "completed successfully" in result.stderr
+
+    run_dirs = list((tmp_path / "seq2seq_lstm").iterdir())
+    assert len(run_dirs) == 1
+    run_dir = run_dirs[0]
+    required_artifacts = {
+        "best_checkpoint.pt",
+        "last_checkpoint.pt",
+        "metrics.csv",
+        "final_metrics.json",
+        "resolved_config.yaml",
+        "environment.json",
+        "run_record.json",
+    }
+    assert required_artifacts <= {path.name for path in run_dir.iterdir()}
+    run_record = read_json(run_dir / "run_record.json")
+    assert run_record["smoke"] is True
+    assert run_record["dataset_identity"]["kind"] == "synthetic_smoke"
+    assert run_record["epochs_completed"] == 1
+    assert run_record["best_epoch"] == 1
+    assert run_record["global_step"] > 0

@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 
 @dataclass(frozen=True)
 class PredictionRecord:
@@ -34,3 +36,12 @@ class ModelBundle:
     metadata: dict[str, Any]
     bundle_path: Path | None = None
     checksums: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class SchemaBoundArray:
+    """An ndarray whose feature order and schema identity are explicit."""
+
+    values: np.ndarray
+    feature_order: tuple[str, ...]
+    schema_hash: str

@@ -10,7 +10,7 @@ import numpy as np
 
 from src.evaluation.metrics import inverse_scale_target
 
-from .schemas import ModelBundle, PredictionRecord
+from .schemas import ModelBundle, PredictionRecord, SchemaBoundArray
 
 
 class Predictor:
@@ -20,6 +20,8 @@ class Predictor:
         self.bundle = bundle
         self.device = device
         self.features, self.target_index, self.input_length, self.horizon = self._schema_values()
+        schema_hash = bundle.feature_schema.get("schema_hash")
+        self.schema_hash = str(schema_hash) if schema_hash else "unversioned-schema"
 
     def _schema_values(self) -> tuple[list[str], int, int, int]:
         schema = self.bundle.feature_schema
@@ -61,8 +63,20 @@ class Predictor:
         return parsed
 
     def _feature_matrix(self, inputs: object) -> np.ndarray:
+        try:
+            import pandas as pd
+        except ImportError:  # pragma: no cover - pandas is a declared runtime dependency
+            pd = None  # type: ignore[assignment]
+
         if isinstance(inputs, np.ndarray):
-            matrix = np.asarray(inputs, dtype=np.float32)
+            raise TypeError(
+                "bare ndarray input is ambiguous; use SchemaBoundArray with explicit "
+                "feature_order and schema_hash"
+            )
+        if pd is not None and isinstance(inputs, pd.DataFrame):
+            if list(inputs.columns) != self.features:
+                raise ValueError("DataFrame columns must exactly match schema feature order")
+            matrix = inputs.to_numpy(dtype=np.float32)
             if matrix.shape != (self.input_length, len(self.features)):
                 raise ValueError(
                     f"input matrix must have shape [{self.input_length},{len(self.features)}]"
@@ -81,6 +95,10 @@ class Predictor:
                         f"observation {index} feature mismatch: "
                         f"missing={sorted(expected - actual)}, extra={sorted(actual - expected)}"
                     )
+                if list(item.keys()) != self.features:
+                    raise ValueError(
+                        f"observation {index} feature order must exactly match the schema"
+                    )
                 ordered: list[float] = []
                 for name in self.features:
                     value = item[name]
@@ -97,32 +115,63 @@ class Predictor:
             raise ValueError("inputs must contain only finite values")
         return matrix
 
-    def predict(self, inputs: object, timestamps: object) -> list[PredictionRecord]:
-        """Return records satisfying the shared prediction contract."""
+    def _validate_schema_bound_array(self, inputs: SchemaBoundArray) -> np.ndarray:
+        if tuple(inputs.feature_order) != tuple(self.features):
+            raise ValueError("array feature_order does not match the bundle schema")
+        if inputs.schema_hash != self.schema_hash:
+            raise ValueError("array schema_hash does not match the bundle schema")
+        values = np.asarray(inputs.values, dtype=np.float32)
+        if values.ndim == 2:
+            values = values[None, ...]
+        expected_tail = (self.input_length, len(self.features))
+        if values.ndim != 3 or values.shape[1:] != expected_tail or values.shape[0] <= 0:
+            raise ValueError(f"array must have shape [B,{expected_tail[0]},{expected_tail[1]}]")
+        if not np.isfinite(values).all():
+            raise ValueError("inputs must contain only finite values")
+        return values
+
+    def predict_batch(self, inputs: SchemaBoundArray) -> np.ndarray:
+        """Return degree-Celsius predictions with shape ``[B,horizon,1]``."""
         import torch
 
-        if not isinstance(timestamps, Sequence) or isinstance(timestamps, (str, bytes)):
-            raise TypeError("timestamps must be a sequence")
-        parsed_timestamps = self._validate_timestamps(timestamps)
-        raw_matrix = self._feature_matrix(inputs)
-        scaler = self.bundle.scaler
-        if not hasattr(scaler, "transform"):
-            raise TypeError("bundle scaler must expose transform")
-        scaled = np.asarray(scaler.transform(raw_matrix), dtype=np.float32)
-        if scaled.shape != raw_matrix.shape or not np.isfinite(scaled).all():
+        raw = self._validate_schema_bound_array(inputs)
+        flat = raw.reshape(-1, raw.shape[-1])
+        scaled = np.asarray(self.bundle.scaler.transform(flat), dtype=np.float32).reshape(raw.shape)
+        if not np.isfinite(scaled).all():
             raise ValueError("scaler returned invalid features")
-        x = torch.from_numpy(scaled).unsqueeze(0).to(self.device)
+        x = torch.from_numpy(scaled).to(self.device)
         model = self.bundle.model
         model.eval()
         with torch.no_grad():
             prediction = model(x, y=None, teacher_forcing_ratio=0.0)
-        if not isinstance(prediction, torch.Tensor) or prediction.shape != (1, self.horizon, 1):
+        expected_shape = (raw.shape[0], self.horizon, 1)
+        if not isinstance(prediction, torch.Tensor) or prediction.shape != expected_shape:
             shape = getattr(prediction, "shape", None)
-            raise ValueError(f"model output must have shape [1,{self.horizon},1], got {shape}")
+            raise ValueError(f"model output must have shape {expected_shape}, got {shape}")
         if prediction.device != x.device or not prediction.is_floating_point():
             raise ValueError("model output must be floating-point and on the input device")
-        scaled_target = prediction.detach().cpu().numpy()[0, :, 0]
-        target = inverse_scale_target(scaled_target, scaler, self.target_index)
+        restored = inverse_scale_target(
+            prediction.detach().cpu().numpy(), self.bundle.scaler, self.target_index
+        )
+        if not np.isfinite(restored).all():
+            raise ValueError("model output contains non-finite values")
+        return np.asarray(restored, dtype=np.float64)
+
+    def predict(self, inputs: object, timestamps: object) -> list[PredictionRecord]:
+        """Return records satisfying the shared prediction contract."""
+        if not isinstance(timestamps, Sequence) or isinstance(timestamps, (str, bytes)):
+            raise TypeError("timestamps must be a sequence")
+        parsed_timestamps = self._validate_timestamps(timestamps)
+        raw_matrix = self._feature_matrix(inputs)
+        if not hasattr(self.bundle.scaler, "transform"):
+            raise TypeError("bundle scaler must expose transform")
+        target = self.predict_batch(
+            SchemaBoundArray(
+                values=raw_matrix,
+                feature_order=tuple(self.features),
+                schema_hash=self.schema_hash,
+            )
+        )[0, :, 0]
         start = parsed_timestamps[-1]
         return [
             PredictionRecord(
@@ -147,6 +196,8 @@ class Predictor:
             "target_index": self.target_index,
             "target_feature": self.features[self.target_index],
             "unit": "degC",
+            "schema_version": self.bundle.feature_schema.get("schema_version", "unknown"),
+            "schema_hash": self.schema_hash,
             "attention_available": hasattr(self.bundle.model, "get_last_attention_weights"),
         }
 

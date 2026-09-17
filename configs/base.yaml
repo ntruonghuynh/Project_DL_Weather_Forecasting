@@ -7,6 +7,9 @@ data:
 training:
   epochs: 10
   batch_size: 64
+  # Use every sixth overlapping training window for a CPU-feasible, temporally
+  # comprehensive real-data run. Validation always remains stride 1.
+  data_stride: 6
   learning_rate: 0.001
   weight_decay: 0.0001
   optimizer: adam

@@ -11,7 +11,7 @@ pandas
 PyYAML
 
 # evaluation
-scikit-learn==1.9.0
+scikit-learn==1.9.1
 matplotlib
 statsmodels
 

@@ -28,7 +28,17 @@ class RunRecord:
     parent_run_id: str | None
     resolved_config: dict[str, Any]
     seed: int
-    metrics: dict[str, float] = field(default_factory=dict)
+    model_name: str = "forecast_model"
+    smoke: bool = False
+    start_time: str = ""
+    end_time: str | None = None
+    duration_seconds: float | None = None
+    epochs_completed: int = 0
+    best_epoch: int | None = None
+    global_step: int = 0
+    dataset_identity: dict[str, Any] = field(default_factory=dict)
+    schema_identity: dict[str, Any] = field(default_factory=dict)
+    metrics: dict[str, float | int] = field(default_factory=dict)
     best_checkpoint: Path | None = None
     last_checkpoint: Path | None = None
     predictions: Path | None = None
@@ -69,10 +79,15 @@ def create_run(
     seed: int,
     parent_run_id: str | None = None,
     runs_dir: Path | str = "runs",
+    *,
+    smoke: bool = False,
+    dataset_identity: dict[str, Any] | None = None,
+    schema_identity: dict[str, Any] | None = None,
 ) -> RunRecord:
     """Create a persisted run with a new immutable run ID and directory structure."""
     model_name = config.get("model", {}).get("name", "forecast_model")
-    timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    started_at = datetime.now(timezone.utc)
+    timestamp_str = started_at.strftime("%Y%m%d_%H%M%S")
     unique_suffix = uuid.uuid4().hex[:6]
     run_id = f"{model_name}_{timestamp_str}_{unique_suffix}"
 
@@ -96,6 +111,11 @@ def create_run(
         parent_run_id=parent_run_id,
         resolved_config=config,
         seed=seed,
+        model_name=model_name,
+        smoke=smoke,
+        start_time=started_at.isoformat(),
+        dataset_identity=dict(dataset_identity or {}),
+        schema_identity=dict(schema_identity or {}),
         metrics={},
         best_checkpoint=None,
         last_checkpoint=None,
@@ -113,7 +133,7 @@ def create_run(
 def update_run_status(
     run_dir: Path | str,
     status: RunStatus,
-    metrics: dict[str, float] | None = None,
+    metrics: dict[str, float | int] | None = None,
     best_checkpoint: Path | None = None,
     last_checkpoint: Path | None = None,
     predictions: Path | None = None,
@@ -129,12 +149,38 @@ def update_run_status(
     if metrics:
         merged_metrics.update(metrics)
 
+    terminal = status in {"completed", "failed"}
+    existing_end_time = existing_data.get("end_time")
+    end_time = datetime.now(timezone.utc) if terminal and not existing_end_time else None
+    start_time = existing_data.get("start_time", "")
+    duration_seconds = existing_data.get("duration_seconds")
+    if end_time is not None and start_time:
+        started_at = datetime.fromisoformat(start_time)
+        duration_seconds = max(0.0, (end_time - started_at).total_seconds())
+
+    epochs_completed = int(merged_metrics.get("epochs_completed", 0))
+    best_epoch_value = merged_metrics.get("best_epoch")
+    best_epoch = int(best_epoch_value) if best_epoch_value is not None else None
+    global_step = int(merged_metrics.get("global_step", 0))
+
     updated_record = RunRecord(
         run_id=existing_data["run_id"],
         status=status,
         parent_run_id=existing_data.get("parent_run_id"),
         resolved_config=existing_data["resolved_config"],
         seed=existing_data["seed"],
+        model_name=existing_data.get(
+            "model_name", existing_data["resolved_config"].get("model", {}).get("name", "")
+        ),
+        smoke=bool(existing_data.get("smoke", False)),
+        start_time=start_time,
+        end_time=end_time.isoformat() if end_time is not None else existing_end_time,
+        duration_seconds=duration_seconds,
+        epochs_completed=epochs_completed,
+        best_epoch=best_epoch,
+        global_step=global_step,
+        dataset_identity=dict(existing_data.get("dataset_identity", {})),
+        schema_identity=dict(existing_data.get("schema_identity", {})),
         metrics=merged_metrics,
         best_checkpoint=best_checkpoint
         if best_checkpoint is not None

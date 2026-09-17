@@ -38,9 +38,39 @@ def load_data_config(config_path: Path | str | None = None) -> dict[str, Any]:
     if not isinstance(config, dict):
         raise ValueError(f"{path} did not parse to a mapping")
 
-    required_sections = ("timestamp", "target", "window", "missing", "split", "scaling")
+    required_sections = (
+        "timestamp",
+        "target",
+        "window",
+        "missing",
+        "split",
+        "scaling",
+        "processed_files",
+    )
     missing_sections = [s for s in required_sections if s not in config]
     if missing_sections:
         raise ValueError(f"{path} is missing required section(s): {missing_sections}")
 
     return config
+
+
+def get_processed_split_path(
+    data_dir: Path | str,
+    split: str,
+    config_path: Path | str | None = None,
+) -> Path:
+    """Resolve a processed split using the canonical data-config mapping."""
+    split_key = "validation" if split == "val" else split
+    processed_files = load_data_config(config_path)["processed_files"]
+    if split_key not in processed_files:
+        supported = ", ".join(sorted(processed_files))
+        raise ValueError(f"Unknown processed split '{split}'. Expected one of: {supported}")
+
+    filename = processed_files[split_key]
+    if not isinstance(filename, str) or not filename.strip():
+        raise ValueError(f"Invalid filename configured for processed split '{split_key}'")
+    if Path(filename).name != filename:
+        raise ValueError(
+            f"Processed filename for '{split_key}' must be a basename, got: {filename}"
+        )
+    return Path(data_dir) / filename

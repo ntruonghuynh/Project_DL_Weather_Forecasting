@@ -1,0 +1,38 @@
+{
+  "bundle_schema_version": "2.0",
+  "created_at": "2026-09-17T14:44:11.362306+00:00",
+  "run_id": "seq2seq_attention_20260917_100234_95dc80",
+  "model_name": "seq2seq_attention",
+  "model_version": "1.0.0",
+  "model_class": "src.models.attention_lstm_seq2seq.AttentionLSTMSeq2Seq",
+  "model_kwargs": {
+    "n_features": 18,
+    "target_feature_index": 1,
+    "horizon": 72,
+    "hidden_size": 128,
+    "num_layers": 1,
+    "dropout": 0.0,
+    "attention_dim": null
+  },
+  "files": {
+    "checkpoint": "model.pt",
+    "scaler": "scaler.joblib",
+    "feature_schema": "feature_schema.json",
+    "resolved_config": "resolved_config.yaml",
+    "preprocessing_config": "preprocessing_config.yaml",
+    "selection_manifest": "selection_manifest.json",
+    "final_test_audit": "final_test_audit.json",
+    "metadata": "metadata.json"
+  },
+  "sha256": {
+    "model.pt": "b133db2b110f3b8b86e02bcb3ebd5cd731c42cdf0c6ca140d8c35c9dad51eb99",
+    "scaler.joblib": "53fcc23145092f67eed93b7ebfceca0223b133a72255990419de9874beaa466a",
+    "feature_schema.json": "6cb02534808965d89fc409c2ad903a00174011b0ca7d154c79537f180b99ca30",
+    "resolved_config.yaml": "1c81811afcf657a6c215fbfa889539c40d9dc017cb77ce57c481b1bea41a084f",
+    "preprocessing_config.yaml": "45798a972e6df2a1a18ced491a4c6ff14e419c94ef2dede9b1e232970999dd0e",
+    "selection_manifest.json": "9646a17f98bd0a9e68377af9c98e083199d1325a67be3063d5a0eb3748e16a9e",
+    "final_test_audit.json": "78aff00bcb3af70591fd269dc78533a2fdd5d8bfbd62b8c27e951f9db03720b0",
+    "metadata.json": "a796df01f81228a38ed3bfa1473b1cfa85d12f424a768f53dcdf87b910030391"
+  },
+  "manifest_sha256": "3fa89932b9d60fd596a9e8329fb694078b7daadca1b51854f76c88572efc5460"
+}

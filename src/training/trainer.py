@@ -61,7 +61,8 @@ class Trainer:
         val_loader: DataLoader,
         config: dict[str, Any],
         run_dir: Path | str | None = None,
-    ) -> dict[str, float]:
+        checkpoint_metadata: dict[str, Any] | None = None,
+    ) -> dict[str, float | int]:
         """Execute the training and autoregressive validation loop.
 
         Args:
@@ -117,11 +118,18 @@ class Trainer:
                 cb.attach(
                     model=model,
                     optimizer=optimizer,
-                    extra_metadata={"config": config, "device": str(self.device)},
+                    scheduler=scheduler,
+                    extra_metadata={
+                        "config": config,
+                        "device": str(self.device),
+                        **(checkpoint_metadata or {}),
+                    },
                 )
 
         best_val_loss = float("inf")
-        history: list[dict[str, float]] = []
+        best_epoch: int | None = None
+        global_step = 0
+        history: list[dict[str, float | int]] = []
 
         for epoch in range(1, epochs + 1):
             # Compute current teacher forcing ratio
@@ -146,6 +154,7 @@ class Trainer:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_val)
 
                 optimizer.step()
+                global_step += 1
 
                 train_loss_accum += loss.item()
                 train_batches += 1
@@ -183,6 +192,7 @@ class Trainer:
 
             if avg_val_loss < best_val_loss:
                 best_val_loss = avg_val_loss
+                best_epoch = epoch
 
             epoch_metrics = {
                 "train_loss": avg_train_loss,
@@ -190,6 +200,7 @@ class Trainer:
                 "val_mae": avg_val_mae,
                 "learning_rate": current_lr,
                 "teacher_forcing_ratio": current_tf_ratio,
+                "global_step": global_step,
             }
             history.append(epoch_metrics)
 
@@ -219,4 +230,6 @@ class Trainer:
             "final_val_mae": history[-1]["val_mae"] if history else float("nan"),
             "best_val_loss": best_val_loss,
             "epochs_completed": len(history),
+            "best_epoch": best_epoch if best_epoch is not None else 0,
+            "global_step": global_step,
         }

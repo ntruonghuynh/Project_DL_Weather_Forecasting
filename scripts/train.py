@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import logging
 import sys
 from pathlib import Path
@@ -17,6 +18,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from src.config import DEFAULT_DATA_CONFIG_PATH, get_processed_split_path  # noqa: E402
 from src.data.dataloader import build_dataloader  # noqa: E402
 from src.data.dataset import WeatherForecastDataset  # noqa: E402
 from src.models.attention_lstm_seq2seq import AttentionLSTMSeq2Seq  # noqa: E402
@@ -34,6 +36,10 @@ from src.utils.run_manager import create_run, update_run_status  # noqa: E402
 from src.utils.seed import set_seed  # noqa: E402
 
 DEFAULT_SCHEMA_PATH = PROJECT_ROOT / "artifacts" / "preprocessing" / "feature_schema.json"
+DEFAULT_SCALER_PATH = PROJECT_ROOT / "artifacts" / "preprocessing" / "scaler.joblib"
+DEFAULT_SPLIT_METADATA_PATH = (
+    PROJECT_ROOT / "artifacts" / "preprocessing" / "split_metadata.json"
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -43,6 +49,11 @@ logger = logging.getLogger("train_cli")
 
 
 def _resolve_schema(schema_path: Path | str | None = None) -> dict[str, Any]:
+    path = _resolve_schema_path(schema_path)
+    return read_json(path)
+
+
+def _resolve_schema_path(schema_path: Path | str | None = None) -> Path:
     path = Path(schema_path) if schema_path else DEFAULT_SCHEMA_PATH
     if not path.is_file():
         alt_path = PROJECT_ROOT / "artifacts" / "feature_schema.json"
@@ -50,7 +61,23 @@ def _resolve_schema(schema_path: Path | str | None = None) -> dict[str, Any]:
             path = alt_path
         else:
             raise FileNotFoundError(f"Feature schema not found at {path} or {alt_path}")
-    return read_json(path)
+    return path
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _artifact_identity(path: Path) -> dict[str, Any]:
+    return {
+        "path": str(path),
+        "sha256": _sha256_file(path),
+        "size_bytes": path.stat().st_size,
+    }
 
 
 def _build_model(
@@ -153,7 +180,13 @@ def parse_args() -> argparse.Namespace:
         "--data-dir",
         type=str,
         default="data/processed",
-        help="Directory containing train.csv and val.csv",
+        help="Directory containing the canonical processed split files",
+    )
+    parser.add_argument(
+        "--schema",
+        type=str,
+        default=str(DEFAULT_SCHEMA_PATH),
+        help="Feature schema artifact used to construct the model and datasets",
     )
     parser.add_argument(
         "--stride",
@@ -182,7 +215,8 @@ def main() -> None:
     set_seed(seed)
 
     # 2. Extract schema information
-    schema = _resolve_schema()
+    schema_path = _resolve_schema_path(args.schema)
+    schema = _resolve_schema(schema_path)
     ordered_features = schema["ordered_features"]
     n_features = schema.get("n_features", len(ordered_features))
     target_info = schema.get("target", {})
@@ -192,10 +226,78 @@ def main() -> None:
     input_length = int(window_cfg.get("input_len_hours", 168))
     horizon = int(window_cfg.get("horizon_hours", 72))
 
+    configured_input_length = int(config.get("data", {}).get("input_hours", input_length))
+    configured_horizon = int(config.get("data", {}).get("forecast_hours", horizon))
+    if (configured_input_length, configured_horizon) != (input_length, horizon):
+        raise ValueError(
+            "Model config and feature schema disagree on the locked window contract: "
+            f"config=({configured_input_length}, {configured_horizon}), "
+            f"schema=({input_length}, {horizon})"
+        )
+
+    train_stride = int(
+        args.stride if args.stride is not None else training_cfg.get("data_stride", 1)
+    )
+    if train_stride <= 0:
+        raise ValueError("training data stride must be positive")
+    training_cfg["data_stride"] = train_stride
+    config["runtime"] = {
+        "smoke": bool(args.smoke),
+        "data_dir": str(args.data_dir),
+        "schema_path": str(schema_path),
+    }
+
+    schema_identity = {
+        **_artifact_identity(schema_path),
+        "schema_hash": schema["schema_hash"],
+        "n_features": n_features,
+        "target_name": target_name,
+        "target_index": target_index,
+        "input_length": input_length,
+        "horizon": horizon,
+    }
+    if args.smoke:
+        dataset_identity = {"kind": "synthetic_smoke", "smoke": True}
+    else:
+        data_dir = Path(args.data_dir)
+        if not data_dir.is_absolute():
+            data_dir = PROJECT_ROOT / data_dir
+        train_csv = get_processed_split_path(data_dir, "train")
+        val_csv = get_processed_split_path(data_dir, "validation")
+        required_artifacts = {
+            "train": train_csv,
+            "validation": val_csv,
+            "scaler": DEFAULT_SCALER_PATH,
+            "split_metadata": DEFAULT_SPLIT_METADATA_PATH,
+            "data_config": DEFAULT_DATA_CONFIG_PATH,
+        }
+        missing = [str(path) for path in required_artifacts.values() if not path.is_file()]
+        if missing:
+            raise FileNotFoundError(
+                "Required real-data artifacts are missing: " + ", ".join(missing)
+            )
+        dataset_identity = {
+            "kind": "jena_processed",
+            "smoke": False,
+            "training_stride": train_stride,
+            **{
+                name: _artifact_identity(path)
+                for name, path in required_artifacts.items()
+            },
+        }
+
     # 3. Create immutable run record
-    record = create_run(config=config, seed=seed, runs_dir=args.runs_dir)
+    record = create_run(
+        config=config,
+        seed=seed,
+        runs_dir=args.runs_dir,
+        smoke=args.smoke,
+        dataset_identity=dataset_identity,
+        schema_identity=schema_identity,
+    )
     run_dir = record.run_dir
     logger.info("Initialized run %s in %s", record.run_id, run_dir)
+    update_run_status(run_dir=run_dir, status="running")
 
     try:
         # 4. Build Model
@@ -215,16 +317,6 @@ def main() -> None:
                 n_features=n_features, input_len=input_length, horizon=horizon
             )
         else:
-            data_dir = PROJECT_ROOT / args.data_dir
-            train_csv = data_dir / "train.csv"
-            val_csv = data_dir / "val.csv"
-
-            if not train_csv.is_file() or not val_csv.is_file():
-                raise FileNotFoundError(
-                    f"Processed datasets not found at {train_csv} or {val_csv}. "
-                    "Run 'python scripts/prepare_data.py' or provide preprocessed data."
-                )
-
             logger.info("Loading preprocessed training and validation CSV files...")
             train_df = pd.read_csv(train_csv)
             val_df = pd.read_csv(val_csv)
@@ -235,6 +327,7 @@ def main() -> None:
                 target=target_name,
                 input_window=input_length,
                 horizon=horizon,
+                stride=train_stride,
             )
             val_ds = WeatherForecastDataset(
                 df=val_df,
@@ -242,6 +335,17 @@ def main() -> None:
                 target=target_name,
                 input_window=input_length,
                 horizon=horizon,
+            )
+
+            if len(train_ds) == 0 or len(val_ds) == 0:
+                raise ValueError(
+                    "Real processed data produced an empty training or validation dataset"
+                )
+            logger.info(
+                "Real data windows: train=%d (stride=%d), validation=%d (stride=1)",
+                len(train_ds),
+                train_stride,
+                len(val_ds),
             )
 
             batch_size = int(training_cfg.get("batch_size", 64))
@@ -277,6 +381,12 @@ def main() -> None:
             val_loader=val_loader,
             config=config,
             run_dir=run_dir,
+            checkpoint_metadata={
+                "run_id": record.run_id,
+                "smoke": bool(args.smoke),
+                "dataset_identity": dataset_identity,
+                "schema_identity": schema_identity,
+            },
         )
 
         # 8. Mark Run Completed

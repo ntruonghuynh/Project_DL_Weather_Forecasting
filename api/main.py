@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import time
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -55,16 +56,26 @@ def create_app(predictor: Predictor | None = None, bundle_path: Path | None = No
         raise RuntimeError("Install API dependencies before creating the FastAPI app")
     if predictor is not None and bundle_path is not None:
         raise ValueError("provide predictor or bundle_path, not both")
-    startup_error: str | None = None
-    if predictor is None and bundle_path is not None:
-        try:
-            predictor = Predictor(load_bundle(bundle_path))
-        except Exception as error:  # preserve a diagnostic health state; never train/fallback
-            startup_error = str(error)
+    initial_predictor = predictor
 
-    application = FastAPI(title="Jena Weather Forecasting API", version="1.0.0")
-    application.state.predictor = predictor
-    application.state.startup_error = startup_error
+    @asynccontextmanager
+    async def lifespan(application: FastAPI):
+        application.state.predictor = initial_predictor
+        application.state.startup_error = None
+        if application.state.predictor is None and bundle_path is not None:
+            try:
+                application.state.predictor = Predictor(load_bundle(bundle_path))
+            except Exception as error:  # diagnostic health state; never train/fallback
+                application.state.startup_error = str(error)
+        yield
+
+    application = FastAPI(
+        title="Jena Weather Forecasting API",
+        version="1.0.0",
+        lifespan=lifespan,
+    )
+    application.state.predictor = initial_predictor
+    application.state.startup_error = None
 
     @application.get("/health")
     def health() -> dict[str, str]:

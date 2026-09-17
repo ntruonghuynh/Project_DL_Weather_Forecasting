@@ -49,10 +49,20 @@ Audit được tạo trước khi đọc kết quả và chặn lần chạy tes
 ## 5. Model bundle
 
 ```bash
-python scripts/export_bundle.py --run-dir <immutable-run-dir> --output-dir <bundle-dir> --model-class <fully-qualified-model-class> --model-kwargs '<constructor-kwargs-from-locked-config-and-schema>' --model-name <model-name> --model-version <version> --run-id <run-id>
+python scripts/export_bundle.py \
+  --output-dir bundle/seq2seq_attention \
+  --selection-manifest experiments/selection_manifest.json \
+  --final-test-audit experiments/final_test_audit.json \
+  --preprocessing-config configs/data.yaml \
+  --model-version 1.0.0
 ```
 
-`--model-kwargs` là JSON object lấy từ resolved config và feature schema của chính run; không nhập số đoán hoặc ghi cứng theo ví dụ. Bundle chứa checkpoint, scaler, schema, config, metadata và checksum của từng file. Exporter tải thử model với strict state-dict trước khi báo thành công; loader từ chối file thiếu, bị sửa hoặc không cùng run.
+Exporter chỉ chấp nhận candidate trong locked selection manifest, tự suy ra model
+constructor từ resolved config/schema và kiểm tra lại final-test audit. Bundle v2
+chứa model, scaler, schema, resolved/preprocessing config, selection manifest,
+final-test audit, metadata và checksum của từng file. Exporter strict-load model
+trước khi báo thành công; loader từ chối file thiếu, bị sửa, sai schema/version
+hoặc không cùng provenance.
 
 ## 6. Payload demo từ dữ liệu thật
 
@@ -84,7 +94,41 @@ Payload JSON cho demo có `timestamps` và `observations` đúng 168 giờ. Có 
 
 ## 8. Trạng thái bàn giao
 
-Code, contract tests và runbook đã hoàn tất. Các con số thực nghiệm, model được chọn, final-test report và bundle production chỉ được tạo khi nhóm huấn luyện bàn giao prediction/checkpoint/config/schema/scaler thật cùng provenance hợp lệ. Trạng thái “chưa có kết quả thật” không phải là kết quả thất bại và không được thay bằng số liệu minh họa.
+Candidate production là Attention LSTM run
+`seq2seq_attention_20260917_100234_95dc80`, được chọn độc quyền bằng validation
+RMSE. Cả ba validation artifacts dùng cùng population
+`jena_validation_fac7f994f7f54901_in168_out72`, 10.026 samples, schema và
+train-fitted scaler.
+
+| Model | MAE °C | MSE °C² | RMSE °C | Improvement vs persistence |
+|---|---:|---:|---:|---:|
+| Attention LSTM | 2.620241 | 11.487950 | 3.389388 | 35.3546% |
+| Seq2Seq LSTM | 2.617508 | 11.530652 | 3.395681 | 35.2346% |
+| Transformer | 3.593824 | 22.563722 | 4.750129 | 9.4014% |
+
+Validation persistence RMSE là 5.243047 °C. Final test của locked candidate:
+MAE 2.721700 °C, MSE 12.300567 °C² và RMSE 3.507216 °C.
+
+Training compute provenance: cả ba run dùng train stride 6; validation stride 1;
+input 168 giờ; horizon 72 giờ. Đây không phải full-overlapping-window training.
+Transformer dùng cấu hình compute-feasible `d_model=64`, 2 encoder/decoder layers
+và teacher forcing 1.0 khi training; validation/inference vẫn dùng 0.0.
+
+The current candidate was selected exclusively using validation results. The
+test split had been accessed during an earlier invalid development iteration
+and therefore is not considered a pristine unseen holdout. Those earlier test
+results were not used to select or modify the final candidate.
+
+Release evidence:
+
+- Bundle: `bundle/seq2seq_attention/`, manifest SHA-256
+  `3fa89932b9d60fd596a9e8329fb694078b7daadca1b51854f76c88572efc5460`.
+- Locked selection: `experiments/selection_manifest.json`.
+- Final-test audit: `experiments/final_test_audit.json`.
+- Real E2E payload/exchange: local artifacts under `artifacts/demo/`; these are
+  intentionally ignored by Git and must not be replaced with synthetic data.
+- Production bundle `model.pt` is a separately delivered release artifact and
+  remains ignored by Git under the project artifact policy.
 
 ## Acceptance checklist
 
@@ -94,3 +138,6 @@ Code, contract tests và runbook đã hoàn tất. Các con số thực nghiệm
 - Request 168 giờ, cadence, feature order, missing/extra feature tests pass.
 - Model inference nhận `y=None`, teacher forcing 0.0.
 - Streamlit chỉ gọi HTTP API và không import/load model bundle.
+- Clean-start requires the separately delivered production bundle at the
+  documented `bundle/seq2seq_attention/` path; it does not require raw data,
+  processed data, runs or retraining.
